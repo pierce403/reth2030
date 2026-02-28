@@ -203,3 +203,5 @@ Reflection cadence:
 - Learned pitfall: using `entry(...).or_default()` before insufficient-balance validation can silently mutate state on failed transfers; validate first, then persist mutations.
 - Hardened `minimal_executable_block_flow_seed_contract` with mixed transaction variant coverage (`Legacy`, `Eip1559`, `Blob`) for pre/post-execution block shapes plus header gas-limit fail-closed precedence checks.
 - Learned pitfall: minimal-flow seed coverage that only exercises legacy transactions can miss representability drift in non-legacy tx variants and validation-order guarantees.
+- Added `peer_lifecycle_observability_seed_contract` tests to lock the checked Phase 4 acceptance criterion (`TODO.md` checkmark + peer observability wiring + required unit/integration coverage for logs/metrics stubs).
+- Learned workflow: when an acceptance criterion is already checked but not explicitly guarded, add a focused seed contract that asserts both API wiring and edge-case test presence to prevent silent observability drift.
