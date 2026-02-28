@@ -3,6 +3,6 @@ name = "reth2030-net"
 version = "0.1.0"
 edition = "2021"
 description = "Networking and sync scaffolding for reth2030"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]

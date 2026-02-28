@@ -39,6 +39,7 @@ cargo run -p reth2030-vectors -- --fixtures-dir vectors/ethereum-state-tests/min
 - Keep public interfaces small and explicit.
 - Use descriptive commit messages tied to milestones.
 - Prefer deterministic tests with clear assertions.
+- Use Apache-2.0 licensing metadata for new crates/files and keep docs aligned.
 
 ## Known Issues and Solutions
 
@@ -109,3 +110,4 @@ Reflection cadence:
 - Added process rule: task completion requires corresponding website progress update.
 - Added `ralph.sh` automation loop for random TODO-driven Codex execution.
 - Added `ralph.log` ignore rule to keep loop logs out of git history.
+- Standardized project licensing to Apache-2.0 (root LICENSE + crate manifests).

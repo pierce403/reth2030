@@ -3,7 +3,7 @@ name = "reth2030-vectors"
 version = "0.1.0"
 edition = "2021"
 description = "Fixture harness and conformance scorecard tooling for reth2030"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 clap = { version = "4.5.32", features = ["derive"] }

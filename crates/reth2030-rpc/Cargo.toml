@@ -3,7 +3,7 @@ name = "reth2030-rpc"
 version = "0.1.0"
 edition = "2021"
 description = "JSON-RPC and Engine API skeleton for reth2030"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 axum = "0.8.6"

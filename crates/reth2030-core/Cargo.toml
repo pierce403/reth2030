@@ -3,7 +3,7 @@ name = "reth2030-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core types and config scaffolding for reth2030"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 reth2030-types = { path = "../reth2030-types" }

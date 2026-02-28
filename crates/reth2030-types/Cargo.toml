@@ -3,7 +3,7 @@ name = "reth2030-types"
 version = "0.1.0"
 edition = "2021"
 description = "Execution-layer primitive types for reth2030"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
