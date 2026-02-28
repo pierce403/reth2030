@@ -56,6 +56,8 @@ cargo run -p reth2030-vectors -- --fixtures-dir vectors/ethereum-state-tests/min
 - After each milestone, commit and push immediately.
 - Whenever a task completes TODO milestones/checklists, update `index.html`
   milestone progress in the same change.
+- Use `./ralph.sh` for autonomous iteration loops; it logs progress to
+  `ralph.log` and runs Codex with full permissions.
 
 ## Rapport and Reflection Notes
 
@@ -105,3 +107,5 @@ Reflection cadence:
 - Added CI artifact publishing for vector reports (`artifacts/vectors`) in workflow.
 - Added root `index.html` project site with ETH2030 references and milestone board.
 - Added process rule: task completion requires corresponding website progress update.
+- Added `ralph.sh` automation loop for random TODO-driven Codex execution.
+- Added `ralph.log` ignore rule to keep loop logs out of git history.
