@@ -28,11 +28,12 @@ const REQUIRED_PEER_WIRING_SNIPPETS: [&str; 7] = [
     "fn allocate_session_id(&mut self) -> Result<u64, PeerManagerError>",
     ".checked_add(1)",
 ];
-const REQUIRED_PEER_UNIT_TESTS: [&str; 7] = [
+const REQUIRED_PEER_UNIT_TESTS: [&str; 8] = [
     "connect_assigns_incrementing_session_ids_and_reconnects_in_place",
     "reconnect_replaces_peer_address_and_rotates_session_id",
     "max_peers_zero_rejects_first_peer_and_keeps_state_empty",
     "max_peers_limit_applies_only_to_new_peer_ids",
+    "rejected_new_peer_does_not_consume_next_session_id",
     "disconnect_is_idempotent_and_clears_session_state",
     "connect_fails_closed_on_session_id_overflow",
     "disconnecting_unknown_peer_does_not_emit_observability_signals",

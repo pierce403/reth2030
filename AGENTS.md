@@ -214,3 +214,4 @@ Reflection cadence:
 - Learned pitfall: serde invalid-length error text varies between underflow and overflow cases; assert semantic failure (`invalid length`) instead of exact phrasing.
 - Hardened `minimal_executable_block_flow_seed_contract` with contract-creation coverage (`to: None`) across `Legacy`, `Eip1559`, and `Blob` transaction variants.
 - Learned behavior: block-flow validation intentionally allows equal adjacent `receipt.cumulative_gas_used` values (non-decreasing, not strictly increasing), so seed tests should lock this with a plateau-gas case.
+- Learned behavior: max-peer rejections occur before session allocation, so rejected new-peer connects must not consume `PeerManager` session IDs.

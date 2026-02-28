@@ -376,6 +376,43 @@ mod tests {
     }
 
     #[test]
+    fn rejected_new_peer_does_not_consume_next_session_id() {
+        let mut manager = PeerManager::new(1);
+
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("first connect must succeed");
+        let err = manager
+            .connect(PeerInfo::new(peer_id(2), "127.0.0.1:30304"))
+            .expect_err("new peer must be rejected at max peers");
+        assert_eq!(err, PeerManagerError::MaxPeersReached { max_peers: 1 });
+
+        assert!(manager.disconnect(&peer_id(1)));
+
+        manager
+            .connect(PeerInfo::new(peer_id(2), "127.0.0.1:30304"))
+            .expect("peer should connect after a slot is freed");
+
+        assert_eq!(
+            manager
+                .session(&peer_id(2))
+                .expect("session should exist for connected peer")
+                .session_id,
+            2
+        );
+        assert_eq!(
+            manager.events(),
+            &[
+                PeerEvent::Connected(peer_id(1)),
+                PeerEvent::RejectedMaxPeers(peer_id(2)),
+                PeerEvent::Disconnected(peer_id(1)),
+                PeerEvent::Connected(peer_id(2)),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (2, 1, 1, 1));
+    }
+
+    #[test]
     fn disconnect_is_idempotent_and_clears_session_state() {
         let mut manager = PeerManager::new(1);
         manager
