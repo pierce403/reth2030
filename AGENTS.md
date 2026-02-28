@@ -55,8 +55,11 @@ cargo run -p reth2030-vectors -- --fixtures-dir vectors/ethereum-state-tests/min
 - `code/` is git-ignored except `code/README.md`.
 - Verify `git status --short` before each commit.
 - After each milestone, commit and push immediately.
-- Whenever a task completes TODO milestones/checklists, update `index.html`
-  milestone progress in the same change.
+- Whenever a task changes TODO milestones/checklists, update `index.html`
+  status language in the same change.
+- Never claim milestone readiness/completion on `index.html` unless explicitly
+  re-verified against current `TODO.md` and repository state; default to
+  conservative "in progress" wording.
 - Use `./ralph.sh` for autonomous iteration loops; it logs progress to
   `ralph.log` and runs Codex with full permissions.
 
@@ -124,3 +127,7 @@ Reflection cadence:
 - Learned pitfall: receipt pseudo-hash based only on `(from, nonce, index)` can collide for distinct tx content; hash derivation now includes full tx payload and fee fields.
 - Hardened sync orchestration to fail closed on malformed header batches: reject over-limit responses, non-contiguous/duplicate header numbers, and `u64` sequence overflow before fetching bodies or executing blocks.
 - Added deterministic malformed-source sync tests covering limit violations, missing start header, gaps, duplicates, overflow, zero-limit no-op, and partial execution before failure.
+- Hardened CI workflow with least-privilege permissions, concurrency cancellation, lockfile-enforced cargo commands, and job timeouts.
+- Added `ci_workflow_contract` tests that parse `.github/workflows/ci.yml` and fail fast on trigger/gate/artifact drift.
+- Learned pitfall: representing toolchain `components` as a comma-delimited scalar is less robust for strict YAML contract testing than an explicit sequence.
+- Learned pitfall: website milestone boards can overstate project readiness; use conservative status language and avoid blanket completion claims unless freshly verified.

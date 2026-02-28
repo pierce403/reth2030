@@ -113,25 +113,6 @@
         letter-spacing: 0.09em;
       }
 
-      .progress {
-        margin-top: 1rem;
-      }
-
-      .bar {
-        height: 12px;
-        border-radius: 999px;
-        border: 1px solid var(--panel-border);
-        background: rgba(255, 255, 255, 0.06);
-        overflow: hidden;
-      }
-
-      .bar > span {
-        display: block;
-        height: 100%;
-        width: 100%;
-        background: linear-gradient(90deg, var(--accent), var(--accent-2));
-      }
-
       .phase-grid {
         margin-top: 1rem;
         display: grid;
@@ -151,15 +132,8 @@
         font-size: 1rem;
       }
 
-      .done {
-        margin-top: 0.38rem;
-        color: var(--accent-2);
-        font-size: 0.92rem;
-        font-weight: 500;
-      }
-
       .phase p {
-        margin: 0.45rem 0 0;
+        margin: 0.4rem 0 0;
         color: var(--muted);
         font-size: 0.95rem;
       }
@@ -203,43 +177,33 @@
       <section class="section">
         <h2>POC Status</h2>
         <p class="small">
-          Milestones mirror <span class="mono">TODO.md</span>. Current completion: <span class="mono">6/6 phases (100%)</span>.
+          Milestones mirror <span class="mono">TODO.md</span> as a working checklist. This page
+          does not claim milestone readiness or full delivery completion.
         </p>
-        <div class="progress">
-          <div class="bar" role="img" aria-label="Milestone progress 100 percent">
-            <span></span>
-          </div>
-        </div>
 
         <div class="phase-grid">
           <article class="phase">
             <h3 class="mono">Phase 0</h3>
-            <div class="done">Complete</div>
             <p>CI, contributor workflow, pre-commit hooks, and architecture notes.</p>
           </article>
           <article class="phase">
             <h3 class="mono">Phase 1</h3>
-            <div class="done">Complete</div>
             <p>Execution-layer types plus deterministic in-memory state transitions.</p>
           </article>
           <article class="phase">
             <h3 class="mono">Phase 2</h3>
-            <div class="done">Complete</div>
             <p>Execution engine abstraction and deterministic block-ordering tests.</p>
           </article>
           <article class="phase">
             <h3 class="mono">Phase 3</h3>
-            <div class="done">Complete</div>
             <p>JSON-RPC and Engine API skeleton with structured error responses.</p>
           </article>
           <article class="phase">
             <h3 class="mono">Phase 4</h3>
-            <div class="done">Complete</div>
             <p>Peer/session scaffolding plus mocked sync orchestration in the node CLI.</p>
           </article>
           <article class="phase">
             <h3 class="mono">Phase 5</h3>
-            <div class="done">Complete</div>
             <p>Vector harness, baseline snapshots, regression detection, and CI artifacts.</p>
           </article>
         </div>

@@ -8,3 +8,6 @@ license = "Apache-2.0"
 [dependencies]
 reth2030-types = { path = "../reth2030-types" }
 sha2 = "0.10"
+
+[dev-dependencies]
+serde_yaml = "0.9"
