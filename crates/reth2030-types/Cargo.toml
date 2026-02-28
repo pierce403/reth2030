@@ -1,0 +1,10 @@
+[package]
+name = "reth2030-types"
+version = "0.1.0"
+edition = "2021"
+description = "Execution-layer primitive types for reth2030"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"

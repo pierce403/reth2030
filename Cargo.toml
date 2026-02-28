@@ -2,5 +2,6 @@
 members = [
     "crates/reth2030",
     "crates/reth2030-core",
+    "crates/reth2030-types",
 ]
 resolver = "2"

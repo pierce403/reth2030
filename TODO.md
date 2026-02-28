@@ -30,16 +30,16 @@ This file tracks implementation work in executable phases.
 - Define state interfaces with a first local backend.
 
 ### Tasks
-- [ ] Create `reth2030-types` crate for primitive protocol types.
-- [ ] Define transaction variants and serialization boundaries.
-- [ ] Define block/header/receipt types and validation helpers.
-- [ ] Add a `StateStore` trait and in-memory implementation.
-- [ ] Add state transition unit tests for basic account/storage updates.
+- [x] Create `reth2030-types` crate for primitive protocol types.
+- [x] Define transaction variants and serialization boundaries.
+- [x] Define block/header/receipt types and validation helpers.
+- [x] Add a `StateStore` trait and in-memory implementation.
+- [x] Add state transition unit tests for basic account/storage updates.
 
 ### Acceptance Criteria
-- [ ] Types can represent at least a minimal executable block flow.
-- [ ] State backend passes deterministic transition tests.
-- [ ] Public APIs are documented at crate-level.
+- [x] Types can represent at least a minimal executable block flow.
+- [x] State backend passes deterministic transition tests.
+- [x] Public APIs are documented at crate-level.
 
 ### Dependencies
 - Depends on: Phase 0 quality gates.

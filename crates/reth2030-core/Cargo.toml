@@ -6,3 +6,4 @@ description = "Core types and config scaffolding for reth2030"
 license = "MIT"
 
 [dependencies]
+reth2030-types = { path = "../reth2030-types" }

@@ -8,6 +8,7 @@ Status: experimental scaffold in active development.
 
 - `crates/reth2030` - CLI binary (`reth2030`)
 - `crates/reth2030-core` - shared core types and config scaffolding
+- `crates/reth2030-types` - execution-layer primitive types (tx, block, receipt)
 - `code/` - local external reference code (ignored by git except `code/README.md`)
 
 ## Quick Start
