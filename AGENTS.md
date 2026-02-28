@@ -223,3 +223,6 @@ Reflection cadence:
 - Learned pitfall: a single history snapshot does not satisfy "tracked over time"; require at least two strictly increasing `recorded_on` entries in `vectors/baseline/conformance-history.json`.
 - Hardened `block_execution_pipeline_seed_contract` to require intrinsic per-tx gas-limit validation wiring and to assert error-precedence behavior when intrinsic and block-gas guards would both fail.
 - Learned behavior: intrinsic gas validation must fail before block gas-limit accounting for the same tx, and the failing tx must remain fail-closed while earlier successful tx state progress is preserved.
+- Hardened `scaffold_engine_seed_contract` with mixed-variant no-op coverage (`Legacy`/`Eip1559`/`Blob` + contract-creation) under `SimpleExecutionEngine::new(0)`.
+- Learned behavior: with scaffold intrinsic gas set to zero, block execution can run with `tx.gas_limit=0` and `header.gas_limit=0` while still applying deterministic state transitions across mixed transaction variants.
+- Learned behavior: when `base_gas_per_tx` exceeds `header.gas_limit` on the first transaction, `SimpleExecutionEngine` fails closed with `GasLimitExceeded` before any state mutation.

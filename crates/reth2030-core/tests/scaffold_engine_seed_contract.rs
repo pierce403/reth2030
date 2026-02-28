@@ -6,7 +6,7 @@ use std::{
 use reth2030_core::{
     Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateStore,
 };
-use reth2030_types::{Block, Header, LegacyTx, Transaction};
+use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction};
 
 const TODO_SEED_TASK_LINE: &str =
     "- [x] Implement a scaffold engine (no-op or simplified execution path).";
@@ -48,6 +48,57 @@ fn mk_legacy(from: [u8; 20], to: [u8; 20], nonce: u64, gas_limit: u64, value: u1
         gas_price: 1,
         value,
         data: Vec::new(),
+    })
+}
+
+fn mk_legacy_contract_creation(
+    from: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+) -> Transaction {
+    Transaction::Legacy(LegacyTx {
+        nonce,
+        from,
+        to: None,
+        gas_limit,
+        gas_price: 1,
+        value,
+        data: Vec::new(),
+    })
+}
+
+fn mk_eip1559(
+    from: [u8; 20],
+    to: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+) -> Transaction {
+    Transaction::Eip1559(Eip1559Tx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit,
+        max_fee_per_gas: 100,
+        max_priority_fee_per_gas: 2,
+        value,
+        data: vec![0xaa, 0xbb],
+    })
+}
+
+fn mk_blob(from: [u8; 20], to: [u8; 20], nonce: u64, gas_limit: u64, value: u128) -> Transaction {
+    Transaction::Blob(BlobTx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit,
+        max_fee_per_gas: 120,
+        max_priority_fee_per_gas: 3,
+        max_fee_per_blob_gas: 10,
+        value,
+        data: vec![0x11, 0x22, 0x33],
+        blob_versioned_hashes: vec![[0x77; 32], [0x88; 32]],
     })
 }
 
@@ -148,6 +199,73 @@ fn scaffold_engine_supports_noop_gas_path_with_zero_base_gas() {
 }
 
 #[test]
+fn scaffold_engine_noop_gas_path_supports_mixed_variants_and_contract_creation() {
+    let engine = SimpleExecutionEngine::new(0);
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy(addr(0x01), addr(0x02), 0, 0, 3),
+            mk_eip1559(addr(0x01), addr(0x03), 1, 0, 2),
+            mk_blob(addr(0x04), addr(0x05), 0, 0, 4),
+            mk_legacy_contract_creation(addr(0x01), 2, 0, 1),
+        ],
+        0,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 10,
+            ..Account::default()
+        },
+    );
+    state.upsert_account(
+        addr(0x04),
+        Account {
+            balance: 4,
+            ..Account::default()
+        },
+    );
+
+    let result = engine
+        .execute_block(&mut state, &block)
+        .expect("zero-base-gas scaffold engine should execute mixed variants");
+
+    assert_eq!(result.total_gas_used, 0);
+    assert_eq!(result.tx_results.len(), 4);
+    assert_eq!(result.receipts.len(), 4);
+    for tx_result in &result.tx_results {
+        assert_eq!(tx_result.gas_used, 0);
+        assert_eq!(tx_result.cumulative_gas_used, 0);
+        assert!(tx_result.success);
+    }
+    for receipt in &result.receipts {
+        assert_eq!(receipt.cumulative_gas_used, 0);
+        assert!(receipt.success);
+    }
+
+    let sender_a = state.get_account(&addr(0x01)).expect("sender A account");
+    let sender_c = state.get_account(&addr(0x04)).expect("sender C account");
+    let recipient_b = state.get_account(&addr(0x02)).expect("recipient B account");
+    let recipient_d = state.get_account(&addr(0x03)).expect("recipient D account");
+    let recipient_e = state.get_account(&addr(0x05)).expect("recipient E account");
+
+    assert_eq!(sender_a.balance, 4);
+    assert_eq!(sender_a.nonce, 3);
+    assert_eq!(sender_c.balance, 0);
+    assert_eq!(sender_c.nonce, 1);
+    assert_eq!(recipient_b.balance, 3);
+    assert_eq!(recipient_d.balance, 2);
+    assert_eq!(recipient_e.balance, 4);
+
+    assert_eq!(
+        state.snapshot().len(),
+        5,
+        "contract-creation tx should not create a recipient account"
+    );
+}
+
+#[test]
 fn scaffold_engine_applies_custom_base_gas_per_transaction() {
     let engine = SimpleExecutionEngine::new(1_000);
     let block = block_with_txs_and_gas_limit(
@@ -216,6 +334,39 @@ fn scaffold_engine_rejects_tx_when_custom_intrinsic_gas_exceeds_tx_limit() {
         ExecutionError::TxGasLimitTooLow {
             tx_gas_limit: 29_999,
             required: 30_000,
+            tx_index: 0,
+        }
+    );
+    assert_eq!(state.snapshot(), before);
+}
+
+#[test]
+fn scaffold_engine_rejects_first_tx_when_block_gas_limit_is_below_intrinsic_cost() {
+    let engine = SimpleExecutionEngine::new(30_000);
+    let block = block_with_txs_and_gas_limit(
+        vec![mk_legacy(addr(0x01), addr(0x02), 0, 30_000, 1)],
+        29_999,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 1,
+            ..Account::default()
+        },
+    );
+    let before = state.snapshot();
+
+    let err = engine
+        .execute_block(&mut state, &block)
+        .expect_err("intrinsic gas > block gas limit should fail before state application");
+
+    assert_eq!(
+        err,
+        ExecutionError::GasLimitExceeded {
+            gas_limit: 29_999,
+            attempted: 30_000,
             tx_index: 0,
         }
     );
