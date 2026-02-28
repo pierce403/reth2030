@@ -226,3 +226,5 @@ Reflection cadence:
 - Hardened `scaffold_engine_seed_contract` with mixed-variant no-op coverage (`Legacy`/`Eip1559`/`Blob` + contract-creation) under `SimpleExecutionEngine::new(0)`.
 - Learned behavior: with scaffold intrinsic gas set to zero, block execution can run with `tx.gas_limit=0` and `header.gas_limit=0` while still applying deterministic state transitions across mixed transaction variants.
 - Learned behavior: when `base_gas_per_tx` exceeds `header.gas_limit` on the first transaction, `SimpleExecutionEngine` fails closed with `GasLimitExceeded` before any state mutation.
+- Hardened `conformance_metric_seed_contract` to lock bootstrap timeline continuity: the first `conformance-history` entry (2026-02-27, 3/4 pass) is now immutable while newer entries append.
+- Learned pitfall: without a fixed bootstrap-entry anchor, append-only conformance timelines can be silently rewritten while still passing monotonic-date and latest-scorecard parity checks.

@@ -10,6 +10,11 @@ const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] A documented conformance metric is tracked over time.";
 const EXPECTED_METRIC: &str = "minimal-state-tests-pass-rate";
 const EXPECTED_SUITE: &str = "minimal-state-tests";
+const EXPECTED_BOOTSTRAP_RECORDED_ON: &str = "2026-02-27";
+const EXPECTED_BOOTSTRAP_TOTAL: u64 = 4;
+const EXPECTED_BOOTSTRAP_PASSED: u64 = 3;
+const EXPECTED_BOOTSTRAP_FAILED: u64 = 1;
+const EXPECTED_BOOTSTRAP_PASS_RATE: f64 = 0.75;
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -255,6 +260,82 @@ fn validate_latest_entry_matches_scorecard(
     Ok(())
 }
 
+fn validate_bootstrap_entry(history: &Value) -> Result<(), String> {
+    let history_root = as_object(history, "conformance history root")?;
+    let entries = as_array(
+        require_key(history_root, "entries", "conformance history root")?,
+        "conformance history root.entries",
+    )?;
+    let first_entry = as_object(
+        entries
+            .first()
+            .ok_or_else(|| "history entries must not be empty".to_string())?,
+        "bootstrap history entry",
+    )?;
+
+    let recorded_on = as_str(
+        require_key(first_entry, "recorded_on", "bootstrap history entry")?,
+        "bootstrap history entry.recorded_on",
+    )?;
+    if recorded_on != EXPECTED_BOOTSTRAP_RECORDED_ON {
+        return Err(format!(
+            "bootstrap history entry date must remain `{EXPECTED_BOOTSTRAP_RECORDED_ON}`, found `{recorded_on}`"
+        ));
+    }
+
+    let suite = as_str(
+        require_key(first_entry, "suite", "bootstrap history entry")?,
+        "bootstrap history entry.suite",
+    )?;
+    if suite != EXPECTED_SUITE {
+        return Err(format!(
+            "bootstrap history entry suite must remain `{EXPECTED_SUITE}`, found `{suite}`"
+        ));
+    }
+
+    let total = as_u64(
+        require_key(first_entry, "total", "bootstrap history entry")?,
+        "bootstrap history entry.total",
+    )?;
+    if total != EXPECTED_BOOTSTRAP_TOTAL {
+        return Err(format!(
+            "bootstrap history entry total must remain `{EXPECTED_BOOTSTRAP_TOTAL}`, found `{total}`"
+        ));
+    }
+
+    let passed = as_u64(
+        require_key(first_entry, "passed", "bootstrap history entry")?,
+        "bootstrap history entry.passed",
+    )?;
+    if passed != EXPECTED_BOOTSTRAP_PASSED {
+        return Err(format!(
+            "bootstrap history entry passed must remain `{EXPECTED_BOOTSTRAP_PASSED}`, found `{passed}`"
+        ));
+    }
+
+    let failed = as_u64(
+        require_key(first_entry, "failed", "bootstrap history entry")?,
+        "bootstrap history entry.failed",
+    )?;
+    if failed != EXPECTED_BOOTSTRAP_FAILED {
+        return Err(format!(
+            "bootstrap history entry failed must remain `{EXPECTED_BOOTSTRAP_FAILED}`, found `{failed}`"
+        ));
+    }
+
+    let pass_rate = as_f64(
+        require_key(first_entry, "pass_rate", "bootstrap history entry")?,
+        "bootstrap history entry.pass_rate",
+    )?;
+    if (pass_rate - EXPECTED_BOOTSTRAP_PASS_RATE).abs() > 1e-12 {
+        return Err(format!(
+            "bootstrap history entry pass_rate must remain `{EXPECTED_BOOTSTRAP_PASS_RATE}`, found `{pass_rate}`"
+        ));
+    }
+
+    Ok(())
+}
+
 fn history_fixture(entries: Value) -> Value {
     json!({
         "metric": EXPECTED_METRIC,
@@ -357,6 +438,37 @@ fn validate_time_series_history_rejects_single_entry_or_non_monotonic_dates() {
 }
 
 #[test]
+fn validate_time_series_history_rejects_invalid_iso_dates() {
+    for invalid_date in ["2026-02-29", "2026-13-01", "2026/02/28", "2026-2-28"] {
+        let history = history_fixture(json!([
+            {
+                "recorded_on": invalid_date,
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 3,
+                "failed": 1,
+                "pass_rate": 0.75
+            },
+            {
+                "recorded_on": "2026-03-01",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 4,
+                "failed": 0,
+                "pass_rate": 1.0
+            }
+        ]));
+
+        let err = validate_time_series_history(&history)
+            .expect_err("invalid recorded_on date must fail validation");
+        assert!(
+            err.contains("valid YYYY-MM-DD"),
+            "expected invalid-date error for `{invalid_date}`, got `{err}`"
+        );
+    }
+}
+
+#[test]
 fn validate_latest_entry_matches_scorecard_rejects_value_drift() {
     let history = history_fixture(json!([
         {
@@ -390,12 +502,40 @@ fn validate_latest_entry_matches_scorecard_rejects_value_drift() {
 }
 
 #[test]
+fn validate_bootstrap_entry_rejects_rewritten_baseline_history() {
+    let rewritten_history = history_fixture(json!([
+        {
+            "recorded_on": EXPECTED_BOOTSTRAP_RECORDED_ON,
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 4,
+            "failed": 0,
+            "pass_rate": 1.0
+        },
+        {
+            "recorded_on": "2026-02-28",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 4,
+            "failed": 0,
+            "pass_rate": 1.0
+        }
+    ]));
+
+    let err =
+        validate_bootstrap_entry(&rewritten_history).expect_err("rewriting first entry must fail");
+    assert!(err.contains("bootstrap history entry"));
+}
+
+#[test]
 fn checked_in_metric_timeline_has_multiple_entries_and_docs_tracking_contract() {
     let history_contents = read_repo_file("vectors/baseline/conformance-history.json");
     let history: Value =
         serde_json::from_str(&history_contents).expect("history artifact must remain valid JSON");
     validate_time_series_history(&history)
         .expect("checked-in conformance history must remain a valid time-series timeline");
+    validate_bootstrap_entry(&history)
+        .expect("checked-in conformance history must preserve bootstrap entry continuity");
 
     let scorecard_contents = read_repo_file("vectors/baseline/scorecard.json");
     let scorecard: Value = serde_json::from_str(&scorecard_contents)
@@ -415,5 +555,9 @@ fn checked_in_metric_timeline_has_multiple_entries_and_docs_tracking_contract() 
     assert!(
         docs.contains("append a new entry"),
         "docs/conformance.md must preserve append-only guidance for timeline updates"
+    );
+    assert!(
+        docs.contains("Do not edit or remove prior entries"),
+        "docs/conformance.md must explicitly preserve historical entries"
     );
 }

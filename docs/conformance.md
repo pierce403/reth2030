@@ -43,6 +43,7 @@ The tracked metric is `minimal-state-tests-pass-rate` for the
 
 When a baseline update is intentionally approved, append a new entry that matches
 the new `vectors/baseline/scorecard.json` values.
+Do not edit or remove prior entries; preserve historical records and only append.
 
 Fixture discovery and parsing rules:
 - JSON fixtures are discovered recursively under the configured fixtures directory.
