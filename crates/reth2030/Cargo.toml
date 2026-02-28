@@ -8,3 +8,4 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5.32", features = ["derive"] }
 reth2030-core = { path = "../reth2030-core" }
+reth2030-net = { path = "../reth2030-net" }

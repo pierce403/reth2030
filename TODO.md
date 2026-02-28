@@ -96,16 +96,16 @@ This file tracks implementation work in executable phases.
 - Ensure node lifecycle management can host future protocol features.
 
 ### Tasks
-- [ ] Create `reth2030-net` crate for peer/session abstractions.
-- [ ] Add a basic sync pipeline interface (headers -> bodies -> execution).
-- [ ] Add peer management scaffolding (connect, disconnect, peer limits).
-- [ ] Add startup/shutdown orchestration in `reth2030` binary.
-- [ ] Add integration tests with mocked peers and deterministic responses.
+- [x] Create `reth2030-net` crate for peer/session abstractions.
+- [x] Add a basic sync pipeline interface (headers -> bodies -> execution).
+- [x] Add peer management scaffolding (connect, disconnect, peer limits).
+- [x] Add startup/shutdown orchestration in `reth2030` binary.
+- [x] Add integration tests with mocked peers and deterministic responses.
 
 ### Acceptance Criteria
-- [ ] Node can run a mocked sync loop without panic.
-- [ ] Peer lifecycle events are observable through logs/metrics stubs.
-- [ ] Sync orchestration is testable without external networks.
+- [x] Node can run a mocked sync loop without panic.
+- [x] Peer lifecycle events are observable through logs/metrics stubs.
+- [x] Sync orchestration is testable without external networks.
 
 ### Dependencies
 - Depends on: Phase 2 execution and Phase 3 API surfaces.

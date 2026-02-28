@@ -2,6 +2,7 @@
 members = [
     "crates/reth2030",
     "crates/reth2030-core",
+    "crates/reth2030-net",
     "crates/reth2030-rpc",
     "crates/reth2030-types",
 ]

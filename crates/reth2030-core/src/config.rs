@@ -30,6 +30,7 @@ pub struct NodeConfig {
     pub http_port: u16,
     pub authrpc_port: u16,
     pub p2p_port: u16,
+    pub max_peers: usize,
 }
 
 impl NodeConfig {
@@ -40,6 +41,7 @@ impl NodeConfig {
             http_port: 8545,
             authrpc_port: 8551,
             p2p_port: 30303,
+            max_peers: 50,
         }
     }
 }
@@ -62,6 +64,7 @@ mod tests {
         assert_eq!(cfg.http_port, 8545);
         assert_eq!(cfg.authrpc_port, 8551);
         assert_eq!(cfg.p2p_port, 30303);
+        assert_eq!(cfg.max_peers, 50);
     }
 
     #[test]

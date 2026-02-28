@@ -8,6 +8,7 @@ Status: experimental scaffold in active development.
 
 - `crates/reth2030` - CLI binary (`reth2030`)
 - `crates/reth2030-core` - shared core types and config scaffolding
+- `crates/reth2030-net` - peer/session and sync orchestration scaffolding
 - `crates/reth2030-rpc` - JSON-RPC + Engine API server skeleton
 - `crates/reth2030-types` - execution-layer primitive types (tx, block, receipt)
 - `code/` - local external reference code (ignored by git except `code/README.md`)
@@ -20,6 +21,7 @@ cargo check --workspace
 cargo test --workspace
 cargo run -p reth2030 -- --help
 cargo run -p reth2030 -- --chain sepolia
+cargo run -p reth2030 -- --run-mock-sync
 ```
 
 ## Notes

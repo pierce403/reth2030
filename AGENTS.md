@@ -92,3 +92,7 @@ Reflection cadence:
 - Implemented baseline methods: `web3_clientVersion`, `eth_chainId`, `eth_blockNumber`.
 - Added `/engine` route with placeholder bearer-JWT guard and structured auth errors.
 - Added API-level tests using `tower::ServiceExt::oneshot` for success/error shape checks.
+- Added `reth2030-net` crate with peer/session lifecycle primitives.
+- Added `SyncOrchestrator` pipeline (`headers -> bodies -> execution`) with mock source/sink.
+- Added deterministic integration tests in `crates/reth2030-net/tests/sync_orchestration.rs`.
+- Added node startup/shutdown orchestration plus `--run-mock-sync` in `reth2030` CLI.
