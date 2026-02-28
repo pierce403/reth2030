@@ -1,0 +1,165 @@
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
+use reth2030_types::{Block, Header, LegacyTx, LogEntry, Receipt, Transaction, ValidationError};
+
+const TODO_ACCEPTANCE_CRITERION_LINE: &str =
+    "- [x] Types can represent at least a minimal executable block flow.";
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn read_repo_file(relative_path: &str) -> String {
+    let path = repo_root().join(relative_path);
+    fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("failed reading {}: {err}", path.display()))
+}
+
+fn addr(byte: u8) -> [u8; 20] {
+    [byte; 20]
+}
+
+fn minimal_header(gas_limit: u64, gas_used: u64) -> Header {
+    Header {
+        parent_hash: [0; 32],
+        number: 1,
+        timestamp: 1_762_312_000,
+        gas_limit,
+        gas_used,
+        state_root: [1; 32],
+        transactions_root: [2; 32],
+        receipts_root: [3; 32],
+    }
+}
+
+fn minimal_tx(nonce: u64, from: [u8; 20], to: [u8; 20], value: u128) -> Transaction {
+    Transaction::Legacy(LegacyTx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit: 21_000,
+        gas_price: 1,
+        value,
+        data: Vec::new(),
+    })
+}
+
+#[test]
+fn todo_marks_minimal_executable_block_flow_acceptance_criterion_complete() {
+    let todo = read_repo_file("TODO.md");
+    assert!(
+        todo.lines()
+            .any(|line| line.trim() == TODO_ACCEPTANCE_CRITERION_LINE),
+        "TODO.md must keep this acceptance criterion checked: {TODO_ACCEPTANCE_CRITERION_LINE}"
+    );
+}
+
+#[test]
+fn types_represent_pre_execution_block_flow_with_empty_receipts() {
+    let block = Block {
+        header: minimal_header(30_000_000, 0),
+        transactions: vec![minimal_tx(0, addr(0x11), addr(0x22), 7)],
+        receipts: Vec::new(),
+    };
+
+    assert_eq!(block.validate_basic(), Ok(()));
+}
+
+#[test]
+fn types_represent_minimal_post_execution_block_flow_and_json_roundtrip() {
+    let block = Block {
+        header: minimal_header(30_000_000, 21_000),
+        transactions: vec![minimal_tx(0, addr(0x33), addr(0x44), 9)],
+        receipts: vec![Receipt {
+            tx_hash: [9; 32],
+            success: true,
+            cumulative_gas_used: 21_000,
+            logs: vec![LogEntry {
+                address: addr(0x44),
+                topics: vec![[7; 32]],
+                data: vec![0xaa, 0xbb],
+            }],
+        }],
+    };
+
+    assert_eq!(block.validate_basic(), Ok(()));
+
+    let encoded = block.to_json_bytes().expect("block serialization");
+    let decoded = Block::from_json_bytes(&encoded).expect("block deserialization");
+    assert_eq!(decoded, block);
+    assert_eq!(decoded.validate_basic(), Ok(()));
+}
+
+#[test]
+fn minimal_block_flow_rejects_receipt_count_mismatch() {
+    let block = Block {
+        header: minimal_header(30_000_000, 21_000),
+        transactions: vec![
+            minimal_tx(0, addr(0x01), addr(0x02), 1),
+            minimal_tx(1, addr(0x01), addr(0x03), 2),
+        ],
+        receipts: vec![Receipt {
+            tx_hash: [1; 32],
+            success: true,
+            cumulative_gas_used: 21_000,
+            logs: Vec::new(),
+        }],
+    };
+
+    assert_eq!(
+        block.validate_basic(),
+        Err(ValidationError::ReceiptCountMismatch)
+    );
+}
+
+#[test]
+fn minimal_block_flow_rejects_non_monotonic_cumulative_gas() {
+    let block = Block {
+        header: minimal_header(30_000_000, 20_000),
+        transactions: vec![
+            minimal_tx(0, addr(0x01), addr(0x02), 1),
+            minimal_tx(1, addr(0x01), addr(0x03), 2),
+        ],
+        receipts: vec![
+            Receipt {
+                tx_hash: [1; 32],
+                success: true,
+                cumulative_gas_used: 30_000,
+                logs: Vec::new(),
+            },
+            Receipt {
+                tx_hash: [2; 32],
+                success: true,
+                cumulative_gas_used: 20_000,
+                logs: Vec::new(),
+            },
+        ],
+    };
+
+    assert_eq!(
+        block.validate_basic(),
+        Err(ValidationError::ReceiptCumulativeGasNotMonotonic)
+    );
+}
+
+#[test]
+fn minimal_block_flow_rejects_final_receipt_gas_mismatch() {
+    let block = Block {
+        header: minimal_header(30_000_000, 21_000),
+        transactions: vec![minimal_tx(0, addr(0x01), addr(0x02), 1)],
+        receipts: vec![Receipt {
+            tx_hash: [1; 32],
+            success: true,
+            cumulative_gas_used: 20_999,
+            logs: Vec::new(),
+        }],
+    };
+
+    assert_eq!(
+        block.validate_basic(),
+        Err(ValidationError::ReceiptFinalGasUsedMismatch)
+    );
+}

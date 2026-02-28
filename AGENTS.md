@@ -183,3 +183,5 @@ Reflection cadence:
 - Learned pitfall: without a seed-specific contract, basic RPC skeleton guarantees (root/engine route topology and HTTP server entrypoint wiring) can drift while unrelated RPC behavior tests still pass.
 - Added `mock_sync_seed_contract` tests to lock the checked Phase 4 seed outcome (`TODO.md` checkmark + mocked-sync CLI/runtime wiring + runtime non-panicking/fail-closed test coverage contract).
 - Learned pitfall: mocked sync readiness can drift if `main.rs` test coverage is slimmed down; enforce presence of success, fail-closed, and repeated-run runtime tests via a seed contract.
+- Added `minimal_executable_block_flow_seed_contract` tests to lock the checked Phase 1 acceptance criterion (`TODO.md` checkmark + pre-execution empty-receipt representability + post-execution receipt/gas invariant boundaries).
+- Learned pitfall: checked acceptance criteria can drift without explicit contract coverage, even when lower-level unit tests still pass.
