@@ -30,6 +30,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p reth2030 -- --help
 cargo run -p reth2030 -- --chain sepolia
+cargo run -p reth2030-vectors -- --fixtures-dir vectors/ethereum-state-tests/minimal --baseline-scorecard vectors/baseline/scorecard.json --baseline-snapshot vectors/baseline/snapshot.json --out-dir artifacts/vectors
 ```
 
 ## Coding Conventions
@@ -96,3 +97,7 @@ Reflection cadence:
 - Added `SyncOrchestrator` pipeline (`headers -> bodies -> execution`) with mock source/sink.
 - Added deterministic integration tests in `crates/reth2030-net/tests/sync_orchestration.rs`.
 - Added node startup/shutdown orchestration plus `--run-mock-sync` in `reth2030` CLI.
+- Added `reth2030-vectors` crate for fixture execution and conformance reporting.
+- Added minimal public fixture suite under `vectors/ethereum-state-tests/minimal`.
+- Added baseline regression files under `vectors/baseline/` with diff-based detection.
+- Added CI artifact publishing for vector reports (`artifacts/vectors`) in workflow.

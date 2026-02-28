@@ -1,0 +1,60 @@
+{
+  "suite": "minimal-state-tests",
+  "fixtures": [
+    {
+      "name": "insufficient-balance",
+      "passed": true,
+      "expected_success": false,
+      "actual_success": false,
+      "mismatches": [],
+      "actual_balances": [
+        {
+          "address": "0x1111111111111111111111111111111111111111",
+          "balance": "5"
+        },
+        {
+          "address": "0x2222222222222222222222222222222222222222",
+          "balance": "0"
+        }
+      ]
+    },
+    {
+      "name": "ordering-sensitive-failure",
+      "passed": true,
+      "expected_success": false,
+      "actual_success": false,
+      "mismatches": [],
+      "actual_balances": [
+        {
+          "address": "0x1111111111111111111111111111111111111111",
+          "balance": "10"
+        },
+        {
+          "address": "0x2222222222222222222222222222222222222222",
+          "balance": "20"
+        },
+        {
+          "address": "0x3333333333333333333333333333333333333333",
+          "balance": "0"
+        }
+      ]
+    },
+    {
+      "name": "transfer-success",
+      "passed": true,
+      "expected_success": true,
+      "actual_success": true,
+      "mismatches": [],
+      "actual_balances": [
+        {
+          "address": "0x1111111111111111111111111111111111111111",
+          "balance": "20"
+        },
+        {
+          "address": "0x2222222222222222222222222222222222222222",
+          "balance": "10"
+        }
+      ]
+    }
+  ]
+}

@@ -31,3 +31,18 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Vector conformance
+        run: |
+          cargo run -p reth2030-vectors -- \
+            --fixtures-dir vectors/ethereum-state-tests/minimal \
+            --baseline-scorecard vectors/baseline/scorecard.json \
+            --baseline-snapshot vectors/baseline/snapshot.json \
+            --out-dir artifacts/vectors
+
+      - name: Upload vector artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vector-reports
+          path: artifacts/vectors/

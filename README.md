@@ -11,6 +11,7 @@ Status: experimental scaffold in active development.
 - `crates/reth2030-net` - peer/session and sync orchestration scaffolding
 - `crates/reth2030-rpc` - JSON-RPC + Engine API server skeleton
 - `crates/reth2030-types` - execution-layer primitive types (tx, block, receipt)
+- `crates/reth2030-vectors` - fixture harness and conformance scorecard generator
 - `code/` - local external reference code (ignored by git except `code/README.md`)
 
 ## Quick Start
@@ -22,6 +23,7 @@ cargo test --workspace
 cargo run -p reth2030 -- --help
 cargo run -p reth2030 -- --chain sepolia
 cargo run -p reth2030 -- --run-mock-sync
+cargo run -p reth2030-vectors -- --update-baseline
 ```
 
 ## Notes

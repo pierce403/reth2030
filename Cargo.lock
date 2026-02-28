@@ -433,6 +433,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "reth2030-vectors"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "reth2030-core",
+ "reth2030-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"

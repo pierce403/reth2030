@@ -118,16 +118,16 @@ This file tracks implementation work in executable phases.
 - Establish objective progress against compatibility targets.
 
 ### Tasks
-- [ ] Add vector harness crate or module for fixture execution.
-- [ ] Integrate a minimal Ethereum state-test subset first.
-- [ ] Add snapshot and regression reporting outputs.
-- [ ] Document pass/fail triage workflow and known deviations.
-- [ ] Define compatibility scorecard and publish in CI artifacts.
+- [x] Add vector harness crate or module for fixture execution.
+- [x] Integrate a minimal Ethereum state-test subset first.
+- [x] Add snapshot and regression reporting outputs.
+- [x] Document pass/fail triage workflow and known deviations.
+- [x] Define compatibility scorecard and publish in CI artifacts.
 
 ### Acceptance Criteria
-- [ ] At least one public vector suite runs automatically in CI.
-- [ ] Regressions are detected and surfaced with actionable diffs.
-- [ ] A documented conformance metric is tracked over time.
+- [x] At least one public vector suite runs automatically in CI.
+- [x] Regressions are detected and surfaced with actionable diffs.
+- [x] A documented conformance metric is tracked over time.
 
 ### Dependencies
 - Depends on: Phases 1-4 functional scaffolding.
