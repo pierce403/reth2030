@@ -11,9 +11,10 @@ use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction, Va
 
 const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] A block execution pipeline exists end-to-end in-process.";
-const REQUIRED_EXECUTION_PIPELINE_FRAGMENTS: [&str; 7] = [
+const REQUIRED_EXECUTION_PIPELINE_FRAGMENTS: [&str; 8] = [
     "block.validate_basic()?;",
     "for (index, tx) in block.transactions.iter().enumerate() {",
+    "if gas_used > tx.gas_limit() {",
     "state.apply_transaction(tx)?;",
     "checked_add(gas_used)",
     "if attempted > block.header.gas_limit {",
@@ -309,6 +310,61 @@ fn pipeline_rejects_transaction_that_pushes_block_over_gas_limit_without_applyin
     );
 
     assert_eq!(sender.balance, 5);
+    assert_eq!(sender.nonce, 1);
+    assert_eq!(first_recipient.balance, 4);
+}
+
+#[test]
+fn pipeline_prioritizes_intrinsic_gas_validation_before_block_gas_limit_guard() {
+    let engine = SimpleExecutionEngine::default();
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy(addr(0x01), addr(0x02), 0, 4),
+            Transaction::Legacy(LegacyTx {
+                nonce: 1,
+                from: addr(0x01),
+                to: Some(addr(0x03)),
+                gas_limit: 20_000,
+                gas_price: 1,
+                value: 2,
+                data: Vec::new(),
+            }),
+        ],
+        21_000,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 6,
+            ..Account::default()
+        },
+    );
+
+    let err = engine.execute_block(&mut state, &block).expect_err(
+        "second tx should fail intrinsic gas validation before block gas limit guard runs",
+    );
+
+    assert_eq!(
+        err,
+        ExecutionError::TxGasLimitTooLow {
+            tx_gas_limit: 20_000,
+            required: 21_000,
+            tx_index: 1,
+        }
+    );
+
+    let sender = state.get_account(&addr(0x01)).expect("sender account");
+    let first_recipient = state
+        .get_account(&addr(0x02))
+        .expect("first tx should remain applied");
+    assert!(
+        state.get_account(&addr(0x03)).is_none(),
+        "second tx recipient must not be created when intrinsic gas check fails"
+    );
+
+    assert_eq!(sender.balance, 2);
     assert_eq!(sender.nonce, 1);
     assert_eq!(first_recipient.balance, 4);
 }

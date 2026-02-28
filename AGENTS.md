@@ -221,3 +221,5 @@ Reflection cadence:
 - Learned behavior: repeated runs are deterministic for mixed contract-creation execution and for fail-closed intrinsic-gas/gas-limit failures, including identical partial post-state snapshots.
 - Added `conformance_metric_seed_contract` tests to lock the checked Phase 5 acceptance criterion (`TODO.md` checkmark + multi-entry conformance timeline invariants + latest-entry scorecard parity + docs append-only guidance).
 - Learned pitfall: a single history snapshot does not satisfy "tracked over time"; require at least two strictly increasing `recorded_on` entries in `vectors/baseline/conformance-history.json`.
+- Hardened `block_execution_pipeline_seed_contract` to require intrinsic per-tx gas-limit validation wiring and to assert error-precedence behavior when intrinsic and block-gas guards would both fail.
+- Learned behavior: intrinsic gas validation must fail before block gas-limit accounting for the same tx, and the failing tx must remain fail-closed while earlier successful tx state progress is preserved.
