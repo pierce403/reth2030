@@ -191,3 +191,5 @@ Reflection cadence:
 - Learned behavior: `u128` string fields accept `u128::MAX` values across tx variants and fail closed on overflow strings.
 - Added `execution_engine_seed_contract` tests to lock the checked Phase 2 seed outcome (`TODO.md` checkmark + `ExecutionEngine` trait signature/object-safety + crate re-export + dyn-dispatch contract).
 - Learned pitfall: even when execution behavior tests exist, a checked seed task can still drift without a dedicated seed contract tied to the exact TODO line and API boundary.
+- Added `block_execution_pipeline_seed_contract` tests to lock the checked Phase 2 acceptance criterion (`TODO.md` checkmark + execution pipeline source wiring + end-to-end in-process success/fail-closed behavior).
+- Learned pitfall: source-fragment contract assertions can be overly formatting-sensitive around method chaining; prefer whitespace-normalized, token-stable fragment checks.
