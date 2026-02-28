@@ -147,3 +147,4 @@ Reflection cadence:
 - Learned behavior: mocked sync reuses a stable peer ID; repeated runs should stay non-panicking and keep peer count bounded while appending observable peer events.
 - Added `architecture_notes_contract` tests that enforce ADR directory presence, strict `ADR-####-slug.md` naming, contiguous numbering, and required ADR sections.
 - Learned pitfall: TODO seed tasks can already be checked; convert those items into contract tests to keep the completed state continuously enforced.
+- Hardened crate-level API documentation with `crate_api_docs_contract` tests that require each library crate to maintain an explicit `## Public API` symbol list matching expected exports.

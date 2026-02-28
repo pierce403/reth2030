@@ -1,4 +1,12 @@
 //! JSON-RPC and Engine API scaffolding for `reth2030`.
+//!
+//! ## Public API
+//! - `RpcServerState`: runtime configuration/state for RPC handlers.
+//! - `JsonRpcRequest`: JSON-RPC request payload model.
+//! - `JsonRpcError`: JSON-RPC error payload model.
+//! - `JsonRpcResponse`: JSON-RPC response envelope model.
+//! - `router`: axum router constructor for public and engine endpoints.
+//! - `serve`: async RPC server entrypoint.
 
 use axum::{
     extract::State,

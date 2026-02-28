@@ -3,6 +3,19 @@
 //! This crate intentionally keeps a compact, well-documented surface for
 //! block/transaction/receipt representations that can be shared by core,
 //! RPC, and networking crates.
+//!
+//! ## Public API
+//! - `Address`: canonical 20-byte account address type.
+//! - `Hash32`: canonical 32-byte hash type.
+//! - `LegacyTx`: legacy transaction payload.
+//! - `Eip1559Tx`: EIP-1559 transaction payload.
+//! - `BlobTx`: blob-carrying transaction payload.
+//! - `Transaction`: tagged transaction enum covering supported variants.
+//! - `LogEntry`: receipt log payload.
+//! - `Receipt`: post-execution transaction receipt payload.
+//! - `Header`: block header payload and basic validation helpers.
+//! - `ValidationError`: block/header validation error surface.
+//! - `Block`: block payload with transaction and receipt lists.
 
 use serde::{Deserialize, Serialize};
 
