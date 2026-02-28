@@ -189,3 +189,5 @@ Reflection cadence:
 - Learned behavior: orchestration should still attempt `shutdown` after a mock-sync failure, leaving runtime state fail-closed at `Stopped`.
 - Hardened `reth2030-types` serde boundary tests to reject unknown fields across all transaction variants and core structs (`Header`, `Receipt`, `LogEntry`, `Block`).
 - Learned behavior: `u128` string fields accept `u128::MAX` values across tx variants and fail closed on overflow strings.
+- Added `execution_engine_seed_contract` tests to lock the checked Phase 2 seed outcome (`TODO.md` checkmark + `ExecutionEngine` trait signature/object-safety + crate re-export + dyn-dispatch contract).
+- Learned pitfall: even when execution behavior tests exist, a checked seed task can still drift without a dedicated seed contract tied to the exact TODO line and API boundary.
