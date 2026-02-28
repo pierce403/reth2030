@@ -20,6 +20,7 @@ Status: experimental scaffold in active development.
 cargo fmt --all -- --check
 cargo check --workspace
 cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p reth2030 -- --help
 cargo run -p reth2030 -- --chain sepolia
 cargo run -p reth2030 -- --run-mock-sync

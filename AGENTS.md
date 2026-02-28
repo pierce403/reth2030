@@ -141,3 +141,5 @@ Reflection cadence:
 - Added small-task-first `ralph.sh` selection heuristics and a fallback rule to decompose oversized TODO items into 5-7 concrete subtasks.
 - Hardened `reth2030-types` serde boundaries with `deny_unknown_fields` on core protocol structs to fail fast on schema drift.
 - Added exhaustive `reth2030-types` tests for all tx variant accessors, `u128` JSON edge-cases (max values, invalid forms, numeric back-compat), and block/header validation ordering.
+- Added `contributor_docs_contract` integration tests to keep `CONTRIBUTING.md` and `README.md` core-check commands present, ordered, and fenced for copy/paste reliability.
+- Learned pitfall: `README.md` Quick Start can drift from contributor quality gates (it was missing the `cargo clippy --workspace --all-targets -- -D warnings` command).
