@@ -120,3 +120,5 @@ Reflection cadence:
 - Hardened Engine API auth placeholder parsing: reject duplicate/malformed `Authorization` headers and fail closed when server JWT config is blank.
 - Hardened Engine API flow to enforce auth before request-body decoding, reducing unauthenticated parse surface on `/engine`.
 - Learned pitfall: adding optional structured JSON-RPC error data can trigger `clippy::result_large_err`; boxing large `Err` variants keeps `-D warnings` green.
+- Hardened `SimpleExecutionEngine` gas accounting: reject txs when intrinsic gas exceeds per-tx `gas_limit` and detect `u64` cumulative gas overflow explicitly.
+- Learned pitfall: receipt pseudo-hash based only on `(from, nonce, index)` can collide for distinct tx content; hash derivation now includes full tx payload and fee fields.

@@ -1,7 +1,8 @@
 //! Execution-engine abstractions for block processing.
 
 use crate::{StateError, StateStore};
-use reth2030_types::{Block, Hash32, Receipt, ValidationError};
+use reth2030_types::{Block, Hash32, Receipt, Transaction, ValidationError};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxExecutionResult {
@@ -22,6 +23,16 @@ pub struct BlockExecutionResult {
 pub enum ExecutionError {
     InvalidBlock(ValidationError),
     State(StateError),
+    TxGasLimitTooLow {
+        tx_gas_limit: u64,
+        required: u64,
+        tx_index: usize,
+    },
+    GasOverflow {
+        cumulative_gas: u64,
+        gas_used: u64,
+        tx_index: usize,
+    },
     GasLimitExceeded {
         gas_limit: u64,
         attempted: u64,
@@ -34,6 +45,24 @@ impl std::fmt::Display for ExecutionError {
         match self {
             ExecutionError::InvalidBlock(err) => write!(f, "invalid block: {}", err),
             ExecutionError::State(err) => write!(f, "state transition error: {}", err),
+            ExecutionError::TxGasLimitTooLow {
+                tx_gas_limit,
+                required,
+                tx_index,
+            } => write!(
+                f,
+                "tx intrinsic gas exceeds tx gas limit at index {}: required={}, tx_gas_limit={}",
+                tx_index, required, tx_gas_limit
+            ),
+            ExecutionError::GasOverflow {
+                cumulative_gas,
+                gas_used,
+                tx_index,
+            } => write!(
+                f,
+                "gas accounting overflow at tx index {}: cumulative_gas={}, gas_used={}",
+                tx_index, cumulative_gas, gas_used
+            ),
             ExecutionError::GasLimitExceeded {
                 gas_limit,
                 attempted,
@@ -107,7 +136,22 @@ impl ExecutionEngine for SimpleExecutionEngine {
 
         for (index, tx) in block.transactions.iter().enumerate() {
             let gas_used = self.gas_for_transaction();
-            let attempted = cumulative_gas.saturating_add(gas_used);
+            if gas_used > tx.gas_limit() {
+                return Err(ExecutionError::TxGasLimitTooLow {
+                    tx_gas_limit: tx.gas_limit(),
+                    required: gas_used,
+                    tx_index: index,
+                });
+            }
+
+            let attempted =
+                cumulative_gas
+                    .checked_add(gas_used)
+                    .ok_or(ExecutionError::GasOverflow {
+                        cumulative_gas,
+                        gas_used,
+                        tx_index: index,
+                    })?;
             if attempted > block.header.gas_limit {
                 return Err(ExecutionError::GasLimitExceeded {
                     gas_limit: block.header.gas_limit,
@@ -127,7 +171,7 @@ impl ExecutionEngine for SimpleExecutionEngine {
             });
 
             receipts.push(Receipt {
-                tx_hash: pseudo_hash(tx.from(), tx.nonce(), index),
+                tx_hash: pseudo_hash(tx),
                 success: true,
                 cumulative_gas_used: cumulative_gas,
                 logs: Vec::new(),
@@ -142,10 +186,85 @@ impl ExecutionEngine for SimpleExecutionEngine {
     }
 }
 
-fn pseudo_hash(from: [u8; 20], nonce: u64, index: usize) -> Hash32 {
+fn pseudo_hash(tx: &Transaction) -> Hash32 {
+    let mut hasher = Sha256::new();
+    hasher.update(b"reth2030:tx-hash:v1");
+
+    match tx {
+        Transaction::Legacy(inner) => {
+            hasher.update([0_u8]);
+            hash_common_fields(
+                &mut hasher,
+                inner.nonce,
+                inner.from,
+                inner.to,
+                inner.gas_limit,
+            );
+            hasher.update(inner.gas_price.to_be_bytes());
+            hasher.update(inner.value.to_be_bytes());
+            hash_payload(&mut hasher, &inner.data);
+        }
+        Transaction::Eip1559(inner) => {
+            hasher.update([1_u8]);
+            hash_common_fields(
+                &mut hasher,
+                inner.nonce,
+                inner.from,
+                inner.to,
+                inner.gas_limit,
+            );
+            hasher.update(inner.max_fee_per_gas.to_be_bytes());
+            hasher.update(inner.max_priority_fee_per_gas.to_be_bytes());
+            hasher.update(inner.value.to_be_bytes());
+            hash_payload(&mut hasher, &inner.data);
+        }
+        Transaction::Blob(inner) => {
+            hasher.update([2_u8]);
+            hash_common_fields(
+                &mut hasher,
+                inner.nonce,
+                inner.from,
+                inner.to,
+                inner.gas_limit,
+            );
+            hasher.update(inner.max_fee_per_gas.to_be_bytes());
+            hasher.update(inner.max_priority_fee_per_gas.to_be_bytes());
+            hasher.update(inner.max_fee_per_blob_gas.to_be_bytes());
+            hasher.update(inner.value.to_be_bytes());
+            hash_payload(&mut hasher, &inner.data);
+            hasher.update((inner.blob_versioned_hashes.len() as u64).to_be_bytes());
+            for blob_hash in &inner.blob_versioned_hashes {
+                hasher.update(blob_hash);
+            }
+        }
+    }
+
+    let digest = hasher.finalize();
     let mut out = [0_u8; 32];
-    out[..20].copy_from_slice(&from);
-    out[20..28].copy_from_slice(&nonce.to_be_bytes());
-    out[28..32].copy_from_slice(&(index as u32).to_be_bytes());
+    out.copy_from_slice(&digest);
     out
+}
+
+fn hash_common_fields(
+    hasher: &mut Sha256,
+    nonce: u64,
+    from: [u8; 20],
+    to: Option<[u8; 20]>,
+    gas_limit: u64,
+) {
+    hasher.update(nonce.to_be_bytes());
+    hasher.update(from);
+    match to {
+        Some(address) => {
+            hasher.update([1_u8]);
+            hasher.update(address);
+        }
+        None => hasher.update([0_u8]),
+    }
+    hasher.update(gas_limit.to_be_bytes());
+}
+
+fn hash_payload(hasher: &mut Sha256, payload: &[u8]) {
+    hasher.update((payload.len() as u64).to_be_bytes());
+    hasher.update(payload);
 }
