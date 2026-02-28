@@ -50,19 +50,16 @@ fn non_empty_trimmed_lines(block: &[String]) -> Vec<&str> {
         .collect()
 }
 
-fn command_sequence_exists_in_order(lines: &[&str], commands: &[&str]) -> bool {
-    let mut search_start = 0usize;
-    for expected in commands {
-        let Some(relative_index) = lines[search_start..]
-            .iter()
-            .position(|line| line == expected)
-        else {
-            return false;
-        };
-        search_start += relative_index + 1;
-    }
+fn block_starts_with_core_checks(block: &[String]) -> bool {
+    let lines = non_empty_trimmed_lines(block);
+    lines.starts_with(&CORE_CHECK_COMMANDS)
+}
 
-    true
+fn count_blocks_starting_with_core_checks(markdown: &str) -> usize {
+    fenced_code_blocks(markdown)
+        .into_iter()
+        .filter(|block| block_starts_with_core_checks(block))
+        .count()
 }
 
 #[test]
@@ -99,45 +96,103 @@ fn this_block_is_unclosed() {}
 }
 
 #[test]
+fn block_starts_with_core_checks_requires_exact_prefix_order() {
+    let valid_with_extra = vec![
+        "cargo fmt --all -- --check".to_owned(),
+        "cargo check --workspace".to_owned(),
+        "cargo test --workspace".to_owned(),
+        "cargo clippy --workspace --all-targets -- -D warnings".to_owned(),
+        "cargo run -p reth2030 -- --help".to_owned(),
+    ];
+    assert!(
+        block_starts_with_core_checks(&valid_with_extra),
+        "extra commands after the core check prefix should remain valid"
+    );
+
+    let missing_prefix = vec![
+        "cargo check --workspace".to_owned(),
+        "cargo fmt --all -- --check".to_owned(),
+        "cargo test --workspace".to_owned(),
+        "cargo clippy --workspace --all-targets -- -D warnings".to_owned(),
+    ];
+    assert!(
+        !block_starts_with_core_checks(&missing_prefix),
+        "out-of-order commands must fail prefix validation"
+    );
+
+    let missing_command = vec![
+        "cargo fmt --all -- --check".to_owned(),
+        "cargo check --workspace".to_owned(),
+        "cargo clippy --workspace --all-targets -- -D warnings".to_owned(),
+    ];
+    assert!(
+        !block_starts_with_core_checks(&missing_command),
+        "incomplete command lists must fail prefix validation"
+    );
+}
+
+#[test]
+fn count_blocks_starting_with_core_checks_counts_only_prefix_matches() {
+    let markdown = r#"
+```bash
+cargo fmt --all -- --check
+cargo check --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+```bash
+cargo check --workspace
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+```bash
+cargo fmt --all -- --check
+cargo check --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo run -p reth2030 -- --help
+```
+"#;
+
+    assert_eq!(
+        count_blocks_starting_with_core_checks(markdown),
+        2,
+        "only blocks with the exact core-check prefix should count"
+    );
+}
+
+#[test]
 fn contributing_documents_one_explicit_core_check_block() {
     let contents = read_repo_file("CONTRIBUTING.md");
-    let blocks = fenced_code_blocks(&contents);
-    let exact_matches = blocks
+    let exact_matches = fenced_code_blocks(&contents)
         .iter()
         .filter(|block| non_empty_trimmed_lines(block).as_slice() == CORE_CHECK_COMMANDS)
         .count();
     assert_eq!(
         exact_matches, 1,
-        "CONTRIBUTING.md must contain exactly one fenced block listing the four core checks"
+        "CONTRIBUTING.md must contain exactly one fenced block listing only the four core checks"
     );
-
-    for command in CORE_CHECK_COMMANDS {
-        assert!(
-            contents.matches(command).count() >= 1,
-            "CONTRIBUTING.md is missing required core check command `{command}`"
-        );
-    }
 }
 
 #[test]
-fn readme_quick_start_includes_all_core_checks_in_order() {
+fn readme_quick_start_has_single_core_check_prefix_block() {
     let contents = read_repo_file("README.md");
-    let blocks = fenced_code_blocks(&contents);
-    let in_order_matches = blocks
-        .iter()
-        .filter(|block| {
-            command_sequence_exists_in_order(&non_empty_trimmed_lines(block), &CORE_CHECK_COMMANDS)
-        })
-        .count();
-    assert!(
-        in_order_matches > 0,
-        "README.md must include a Quick Start fenced block that lists core checks in order"
+    let prefix_matches = count_blocks_starting_with_core_checks(&contents);
+    assert_eq!(
+        prefix_matches, 1,
+        "README.md must include exactly one fenced block that starts with the four core checks"
     );
+}
 
-    for command in CORE_CHECK_COMMANDS {
-        assert!(
-            contents.contains(command),
-            "README.md is missing required core check command `{command}`"
-        );
-    }
+#[test]
+fn agents_build_commands_has_single_core_check_prefix_block() {
+    let contents = read_repo_file("AGENTS.md");
+    let prefix_matches = count_blocks_starting_with_core_checks(&contents);
+    assert_eq!(
+        prefix_matches, 1,
+        "AGENTS.md must include exactly one fenced block that starts with the four core checks"
+    );
 }
