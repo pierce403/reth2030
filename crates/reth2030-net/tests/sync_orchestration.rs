@@ -1,8 +1,8 @@
 use reth2030_net::{
-    BlockBodyRef, HeaderRef, MockSyncSource, PeerEvent, PeerInfo, RecordingExecutionSink,
-    SyncError, SyncOrchestrator, SyncSource,
+    BlockBodyRef, ExecutionSink, HeaderRef, MockSyncSource, PeerEvent, PeerInfo,
+    RecordingExecutionSink, SyncError, SyncOrchestrator, SyncSource,
 };
-use std::collections::BTreeMap;
+use std::{cell::Cell, collections::BTreeMap};
 
 fn peer_id(byte: u8) -> [u8; 16] {
     [byte; 16]
@@ -12,6 +12,7 @@ fn peer_id(byte: u8) -> [u8; 16] {
 struct FixedHeaderSource {
     headers: Vec<HeaderRef>,
     tx_counts: BTreeMap<u64, usize>,
+    body_fetch_count: Cell<usize>,
     ignore_limit: bool,
 }
 
@@ -31,6 +32,7 @@ impl FixedHeaderSource {
         Self {
             headers,
             tx_counts,
+            body_fetch_count: Cell::new(0),
             ignore_limit: false,
         }
     }
@@ -38,6 +40,10 @@ impl FixedHeaderSource {
     fn ignoring_limit(mut self) -> Self {
         self.ignore_limit = true;
         self
+    }
+
+    fn body_fetch_count(&self) -> usize {
+        self.body_fetch_count.get()
     }
 }
 
@@ -52,8 +58,36 @@ impl SyncSource for FixedHeaderSource {
     }
 
     fn fetch_body(&self, header: &HeaderRef) -> BlockBodyRef {
+        self.body_fetch_count
+            .set(self.body_fetch_count.get().saturating_add(1));
         let tx_count = self.tx_counts.get(&header.number).copied().unwrap_or(0);
         BlockBodyRef { tx_count }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct PanickingSource;
+
+impl SyncSource for PanickingSource {
+    fn fetch_headers(&self, _start: u64, _limit: usize) -> Vec<HeaderRef> {
+        panic!("fetch_headers should not be called")
+    }
+
+    fn fetch_body(&self, _header: &HeaderRef) -> BlockBodyRef {
+        panic!("fetch_body should not be called")
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct PanickingExecutionSink;
+
+impl ExecutionSink for PanickingExecutionSink {
+    fn execute_synced_block(
+        &mut self,
+        _header: &HeaderRef,
+        _body: &BlockBodyRef,
+    ) -> Result<(), String> {
+        panic!("execute_synced_block should not be called")
     }
 }
 
@@ -132,12 +166,12 @@ fn sync_results_are_deterministic_across_runs() {
 
 #[test]
 fn execution_failures_are_mapped_to_sync_error() {
-    let source = MockSyncSource::with_tx_counts(&[(7, 1), (8, 1)]);
+    let source = FixedHeaderSource::with_tx_counts(&[(7, 1), (8, 1), (9, 1)]);
     let mut sink = RecordingExecutionSink::with_failure(8);
     let mut orchestrator = SyncOrchestrator::new(1);
 
     let err = orchestrator
-        .run_once(&source, &mut sink, 7, 2)
+        .run_once(&source, &mut sink, 7, 3)
         .expect_err("must fail on header 8");
 
     assert_eq!(
@@ -148,6 +182,7 @@ fn execution_failures_are_mapped_to_sync_error() {
         }
     );
     assert_eq!(sink.executed(), &[(7, 1)]);
+    assert_eq!(source.body_fetch_count(), 2);
 }
 
 #[test]
@@ -207,6 +242,7 @@ fn sync_rejects_gapped_header_sequence() {
             got: 6,
         }
     );
+    assert_eq!(source.body_fetch_count(), 0);
     assert!(sink.executed().is_empty());
 }
 
@@ -251,8 +287,8 @@ fn sync_detects_header_sequence_overflow() {
 
 #[test]
 fn sync_with_zero_limit_is_a_noop() {
-    let source = MockSyncSource::with_tx_counts(&[(1, 1), (2, 2)]);
-    let mut sink = RecordingExecutionSink::new();
+    let source = PanickingSource;
+    let mut sink = PanickingExecutionSink;
     let mut orchestrator = SyncOrchestrator::new(1);
 
     let report = orchestrator
@@ -260,5 +296,4 @@ fn sync_with_zero_limit_is_a_noop() {
         .expect("zero limit should return an empty batch");
 
     assert!(report.steps.is_empty());
-    assert!(sink.executed().is_empty());
 }

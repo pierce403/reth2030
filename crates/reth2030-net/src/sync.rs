@@ -103,6 +103,10 @@ impl SyncOrchestrator {
         start: u64,
         limit: usize,
     ) -> Result<SyncReport, SyncError> {
+        if limit == 0 {
+            return Ok(SyncReport { steps: Vec::new() });
+        }
+
         let headers = source.fetch_headers(start, limit);
         validate_header_batch(start, limit, &headers)?;
         let mut steps = Vec::with_capacity(headers.len());

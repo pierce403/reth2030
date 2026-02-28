@@ -162,3 +162,5 @@ Reflection cadence:
 - Hardened `architecture_notes_contract` ADR content checks to enforce first-line ADR title numbering, single metadata lines, allowed status values, ISO `YYYY-MM-DD` dates, and non-empty ordered required sections.
 - Added explicit peer observability stubs in `PeerManager`: deterministic lifecycle log lines and metrics snapshots (`connected`, `disconnected`, `rejected_max_peers`, `active_peers`).
 - Learned behavior: clearing the transient `PeerEvent` buffer should not reset log/metrics stubs, preserving lifecycle observability across event-polling boundaries.
+- Hardened `SyncOrchestrator::run_once` so `limit=0` short-circuits before `SyncSource::fetch_headers`, ensuring zero-limit sync tests never touch external fetch hooks.
+- Added sync integration assertions that malformed header batches trigger fail-closed rejection before any body fetch and that execution failure stops further body fetches immediately.
