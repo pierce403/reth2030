@@ -1,0 +1,14 @@
+{
+  "metric": "minimal-state-tests-pass-rate",
+  "description": "Historical scorecard trend for vectors/ethereum-state-tests/minimal.",
+  "entries": [
+    {
+      "recorded_on": "2026-02-28",
+      "suite": "minimal-state-tests",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "pass_rate": 1.0
+    }
+  ]
+}

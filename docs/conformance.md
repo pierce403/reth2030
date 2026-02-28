@@ -28,6 +28,22 @@ The scorecard tracks:
 - failed fixtures
 - pass rate (`0.0..1.0`)
 
+## Conformance Metric Timeline
+
+To make progress measurable over time, this repo keeps an append-only history file at:
+
+- `vectors/baseline/conformance-history.json`
+
+The tracked metric is `minimal-state-tests-pass-rate` for the
+`minimal-state-tests` suite. Each history entry records:
+
+- `recorded_on` (`YYYY-MM-DD`, strictly increasing)
+- `total`, `passed`, `failed`
+- `pass_rate`
+
+When a baseline update is intentionally approved, append a new entry that matches
+the new `vectors/baseline/scorecard.json` values.
+
 Fixture discovery and parsing rules:
 - JSON fixtures are discovered recursively under the configured fixtures directory.
 - Numeric fields (`balance`, `value`) accept decimal strings or `0x`-prefixed hex strings.
@@ -39,7 +55,9 @@ Fixture discovery and parsing rules:
 2. Open `artifacts/vectors/snapshot.json` to find fixture-level mismatch details.
 3. Determine whether behavior changed intentionally or due to a regression.
 4. For intended changes, update fixture expectations and run `--update-baseline`.
-5. For unintended changes, fix implementation and keep the baseline unchanged.
+5. If baseline changed intentionally, append a matching entry to
+   `vectors/baseline/conformance-history.json`.
+6. For unintended changes, fix implementation and keep baseline/history unchanged.
 
 ## Known Deviations (Current)
 

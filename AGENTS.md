@@ -150,3 +150,5 @@ Reflection cadence:
 - Hardened crate-level API documentation with `crate_api_docs_contract` tests that require each library crate to maintain an explicit `## Public API` symbol list matching expected exports.
 - Hardened `reth2030-types` block validation so populated receipts must have non-decreasing `cumulative_gas_used` and a final value equal to `header.gas_used`.
 - Learned pitfall: receipt-bearing block fixtures can silently drift from header gas accounting unless receipt cumulative gas invariants are validated explicitly.
+- Added `vectors/baseline/conformance-history.json` as an append-only conformance metric timeline tied to `vectors/baseline/scorecard.json`.
+- Added `conformance_history_contract` tests to enforce valid date ordering, score math invariants, and latest-entry parity with the checked-in scorecard.
