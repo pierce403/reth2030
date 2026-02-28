@@ -502,6 +502,151 @@ mod tests {
     }
 
     #[test]
+    fn transaction_u128_fields_accept_max_string_inputs_for_all_variants() {
+        let max = u128::MAX.to_string();
+
+        let legacy: Transaction = serde_json::from_value(json!({
+            "tx_type": "legacy",
+            "nonce": 11,
+            "from": vec![1_u8; 20],
+            "to": vec![2_u8; 20],
+            "gas_limit": 21_000,
+            "gas_price": max.clone(),
+            "value": max.clone(),
+            "data": []
+        }))
+        .expect("legacy max u128 strings should deserialize");
+        assert_eq!(
+            legacy,
+            Transaction::Legacy(LegacyTx {
+                nonce: 11,
+                from: addr(0x01),
+                to: Some(addr(0x02)),
+                gas_limit: 21_000,
+                gas_price: u128::MAX,
+                value: u128::MAX,
+                data: Vec::new(),
+            })
+        );
+
+        let eip1559: Transaction = serde_json::from_value(json!({
+            "tx_type": "eip1559",
+            "nonce": 12,
+            "from": vec![3_u8; 20],
+            "to": null,
+            "gas_limit": 30_000,
+            "max_fee_per_gas": max.clone(),
+            "max_priority_fee_per_gas": max.clone(),
+            "value": max.clone(),
+            "data": [1, 2, 3]
+        }))
+        .expect("eip1559 max u128 strings should deserialize");
+        assert_eq!(
+            eip1559,
+            Transaction::Eip1559(Eip1559Tx {
+                nonce: 12,
+                from: addr(0x03),
+                to: None,
+                gas_limit: 30_000,
+                max_fee_per_gas: u128::MAX,
+                max_priority_fee_per_gas: u128::MAX,
+                value: u128::MAX,
+                data: vec![1, 2, 3],
+            })
+        );
+
+        let blob: Transaction = serde_json::from_value(json!({
+            "tx_type": "blob",
+            "nonce": 13,
+            "from": vec![4_u8; 20],
+            "to": vec![5_u8; 20],
+            "gas_limit": 40_000,
+            "max_fee_per_gas": max.clone(),
+            "max_priority_fee_per_gas": max.clone(),
+            "max_fee_per_blob_gas": max.clone(),
+            "value": max,
+            "data": [4, 5],
+            "blob_versioned_hashes": [vec![9_u8; 32]]
+        }))
+        .expect("blob max u128 strings should deserialize");
+        assert_eq!(
+            blob,
+            Transaction::Blob(BlobTx {
+                nonce: 13,
+                from: addr(0x04),
+                to: Some(addr(0x05)),
+                gas_limit: 40_000,
+                max_fee_per_gas: u128::MAX,
+                max_priority_fee_per_gas: u128::MAX,
+                max_fee_per_blob_gas: u128::MAX,
+                value: u128::MAX,
+                data: vec![4, 5],
+                blob_versioned_hashes: vec![[9; 32]],
+            })
+        );
+    }
+
+    #[test]
+    fn transaction_u128_fields_reject_overflow_string_inputs() {
+        let overflow = "340282366920938463463374607431768211456";
+        let overflow_cases = vec![
+            (
+                "legacy.gas_price",
+                json!({
+                    "tx_type": "legacy",
+                    "nonce": 1,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "gas_price": overflow,
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "eip1559.max_fee_per_gas",
+                json!({
+                    "tx_type": "eip1559",
+                    "nonce": 2,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": overflow,
+                    "max_priority_fee_per_gas": "1",
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "blob.max_fee_per_blob_gas",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": overflow,
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![7_u8; 32]]
+                }),
+            ),
+        ];
+
+        for (field, candidate) in overflow_cases {
+            let err = serde_json::from_value::<Transaction>(candidate)
+                .expect_err("overflow u128 string must fail")
+                .to_string();
+            assert!(
+                err.contains("invalid u128 string"),
+                "unexpected error for {field}: {err}"
+            );
+        }
+    }
+
+    #[test]
     fn transaction_u128_fields_reject_invalid_string() {
         let err = serde_json::from_value::<Transaction>(json!({
             "tx_type": "legacy",
@@ -562,21 +707,65 @@ mod tests {
     }
 
     #[test]
-    fn transaction_deserialization_rejects_unknown_fields() {
-        let err = serde_json::from_value::<Transaction>(json!({
-            "tx_type": "legacy",
-            "nonce": 1,
-            "from": vec![1_u8; 20],
-            "to": null,
-            "gas_limit": 21_000,
-            "gas_price": "1",
-            "value": "0",
-            "data": [],
-            "unexpected": 123
-        }))
-        .expect_err("unknown field must fail")
-        .to_string();
-        assert!(err.contains("unknown field"), "unexpected error: {err}");
+    fn transaction_deserialization_rejects_unknown_fields_for_all_variants() {
+        let unknown_field_cases = vec![
+            (
+                "legacy",
+                json!({
+                    "tx_type": "legacy",
+                    "nonce": 1,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "gas_price": "1",
+                    "value": "0",
+                    "data": [],
+                    "unexpected": 123
+                }),
+            ),
+            (
+                "eip1559",
+                json!({
+                    "tx_type": "eip1559",
+                    "nonce": 2,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "unexpected": 123
+                }),
+            ),
+            (
+                "blob",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![7_u8; 32]],
+                    "unexpected": 123
+                }),
+            ),
+        ];
+
+        for (variant, candidate) in unknown_field_cases {
+            let err = serde_json::from_value::<Transaction>(candidate)
+                .expect_err("unknown field must fail")
+                .to_string();
+            assert!(
+                err.contains("unknown field"),
+                "unexpected error for {variant}: {err}"
+            );
+        }
     }
 
     #[test]
@@ -884,6 +1073,65 @@ mod tests {
         let encoded = block.to_json_bytes().expect("block serialization");
         let decoded = Block::from_json_bytes(&encoded).expect("block deserialization");
         assert_eq!(decoded, block);
+    }
+
+    #[test]
+    fn header_deserialization_rejects_unknown_fields() {
+        let mut value = serde_json::to_value(sample_header()).expect("serialize header");
+        value
+            .as_object_mut()
+            .expect("header must serialize to object")
+            .insert("unexpected".to_string(), json!("extra"));
+
+        let err = serde_json::from_value::<Header>(value)
+            .expect_err("unknown header field must fail")
+            .to_string();
+        assert!(err.contains("unknown field"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn receipt_deserialization_rejects_unknown_fields() {
+        let receipt = Receipt {
+            tx_hash: [9; 32],
+            success: true,
+            cumulative_gas_used: 42_000,
+            logs: vec![LogEntry {
+                address: addr(0x44),
+                topics: vec![[7; 32]],
+                data: vec![1, 2, 3],
+            }],
+        };
+
+        let mut value = serde_json::to_value(receipt).expect("serialize receipt");
+        value
+            .as_object_mut()
+            .expect("receipt must serialize to object")
+            .insert("unexpected".to_string(), json!("extra"));
+
+        let err = serde_json::from_value::<Receipt>(value)
+            .expect_err("unknown receipt field must fail")
+            .to_string();
+        assert!(err.contains("unknown field"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn log_entry_deserialization_rejects_unknown_fields() {
+        let log_entry = LogEntry {
+            address: addr(0x44),
+            topics: vec![[7; 32]],
+            data: vec![1, 2, 3],
+        };
+
+        let mut value = serde_json::to_value(log_entry).expect("serialize log entry");
+        value
+            .as_object_mut()
+            .expect("log entry must serialize to object")
+            .insert("unexpected".to_string(), json!("extra"));
+
+        let err = serde_json::from_value::<LogEntry>(value)
+            .expect_err("unknown log entry field must fail")
+            .to_string();
+        assert!(err.contains("unknown field"), "unexpected error: {err}");
     }
 
     #[test]

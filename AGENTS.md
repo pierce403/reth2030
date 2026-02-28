@@ -187,3 +187,5 @@ Reflection cadence:
 - Learned pitfall: checked acceptance criteria can drift without explicit contract coverage, even when lower-level unit tests still pass.
 - Added `startup_shutdown_seed_contract` tests to lock the checked Phase 4 startup/shutdown task (`TODO.md` checkmark + lifecycle state machine wiring + runtime test coverage contract).
 - Learned behavior: orchestration should still attempt `shutdown` after a mock-sync failure, leaving runtime state fail-closed at `Stopped`.
+- Hardened `reth2030-types` serde boundary tests to reject unknown fields across all transaction variants and core structs (`Header`, `Receipt`, `LogEntry`, `Block`).
+- Learned behavior: `u128` string fields accept `u128::MAX` values across tx variants and fail closed on overflow strings.
