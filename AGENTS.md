@@ -172,3 +172,4 @@ Reflection cadence:
 - Learned pitfall: modeling request `id`/`params` as unconstrained `serde_json::Value` silently accepts invalid JSON-RPC shapes unless explicitly validated.
 - Added repeated-run execution determinism tests in `reth2030-core` covering mixed tx variants (`Legacy`, `Eip1559`, `Blob`) with payload/blob fields.
 - Learned behavior: execution failures after partial state progress are deterministic across reruns from identical pre-state (stable `ExecutionError` and identical post-failure state snapshot).
+- Learned workflow: when `ralph.sh` picks an already-checked seed task, add a focused contract test that locks the completed outcome (TODO checkmark + workspace/member/API invariants) instead of reopening TODO state.
