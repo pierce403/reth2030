@@ -70,6 +70,32 @@ fn find_step_by_name<'a>(steps: &'a Sequence, name: &str) -> &'a Mapping {
         .unwrap_or_else(|| panic!("missing step named `{name}`"))
 }
 
+fn count_steps_by_name(steps: &Sequence, name: &str) -> usize {
+    steps
+        .iter()
+        .map(|step| as_mapping(step, "job step"))
+        .filter(|step| map_get(step, "name").and_then(Value::as_str) == Some(name))
+        .count()
+}
+
+fn find_step_index_by_name(steps: &Sequence, name: &str) -> usize {
+    steps
+        .iter()
+        .position(|step| {
+            map_get(as_mapping(step, "job step"), "name").and_then(Value::as_str) == Some(name)
+        })
+        .unwrap_or_else(|| panic!("missing step named `{name}`"))
+}
+
+fn find_step_index_by_uses(steps: &Sequence, uses: &str) -> usize {
+    steps
+        .iter()
+        .position(|step| {
+            map_get(as_mapping(step, "job step"), "uses").and_then(Value::as_str) == Some(uses)
+        })
+        .unwrap_or_else(|| panic!("missing step with uses `{uses}`"))
+}
+
 fn collect_json_files_recursive(path: &Path) -> Vec<PathBuf> {
     fn recurse(path: &Path, files: &mut Vec<PathBuf>) {
         let mut entries: Vec<PathBuf> = fs::read_dir(path)
@@ -146,9 +172,26 @@ fn ci_workflow_still_runs_automatically_on_push_and_pull_request() {
         "push trigger must include the main branch for automatic CI runs"
     );
     assert!(
+        map_get(push, "paths").is_none() && map_get(push, "paths-ignore").is_none(),
+        "push trigger must not use path filters that could skip automatic CI runs"
+    );
+    assert!(
         map_get(on, "pull_request").is_some(),
         "pull_request trigger must remain enabled for automatic CI runs"
     );
+    let pull_request = map_get_required(on, "pull_request", "trigger block");
+    if let Some(pull_request) = pull_request.as_mapping() {
+        assert!(
+            map_get(pull_request, "paths").is_none()
+                && map_get(pull_request, "paths-ignore").is_none(),
+            "pull_request trigger must not use path filters that could skip automatic CI runs"
+        );
+    } else {
+        assert!(
+            pull_request.is_null(),
+            "pull_request trigger must be null or a mapping"
+        );
+    }
 }
 
 #[test]
@@ -165,12 +208,41 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
         map_get(vector_job, "if").is_none(),
         "vector-conformance job must not be conditionally gated"
     );
+    assert!(
+        map_get(vector_job, "needs").is_none(),
+        "vector-conformance job must not depend on other jobs that can suppress execution"
+    );
 
     let steps = as_sequence(
         map_get_required(vector_job, "steps", "jobs.vector-conformance"),
         "jobs.vector-conformance.steps",
     );
+    assert_eq!(
+        count_steps_by_name(steps, "Vector conformance"),
+        1,
+        "vector-conformance job must contain exactly one `Vector conformance` step"
+    );
+
     let vector_run = find_step_by_name(steps, "Vector conformance");
+    assert!(
+        map_get(vector_run, "if").is_none(),
+        "Vector conformance step must not be conditionally gated"
+    );
+    if let Some(continue_on_error) = map_get(vector_run, "continue-on-error") {
+        assert_eq!(
+            continue_on_error.as_bool(),
+            Some(false),
+            "Vector conformance step must fail the job when the vector suite fails"
+        );
+    }
+
+    let vector_step_index = find_step_index_by_name(steps, "Vector conformance");
+    let upload_step_index = find_step_index_by_uses(steps, "actions/upload-artifact@v4");
+    assert!(
+        vector_step_index < upload_step_index,
+        "Vector conformance step must execute before artifact upload"
+    );
+
     let vector_command = as_str(
         map_get_required(vector_run, "run", "Vector conformance step"),
         "vector run command",
