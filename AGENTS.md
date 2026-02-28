@@ -215,3 +215,5 @@ Reflection cadence:
 - Hardened `minimal_executable_block_flow_seed_contract` with contract-creation coverage (`to: None`) across `Legacy`, `Eip1559`, and `Blob` transaction variants.
 - Learned behavior: block-flow validation intentionally allows equal adjacent `receipt.cumulative_gas_used` values (non-decreasing, not strictly increasing), so seed tests should lock this with a plateau-gas case.
 - Learned behavior: max-peer rejections occur before session allocation, so rejected new-peer connects must not consume `PeerManager` session IDs.
+- Learned behavior: runtime shutdown disconnect ordering is deterministic by `PeerId` key order even when peers were connected out of order, so startup/shutdown tests should lock that sequence explicitly.
+- Learned behavior: `NodeRuntime::execute` fails closed without lifecycle mutation if called while already running (start precondition failure path).

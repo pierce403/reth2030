@@ -474,6 +474,53 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_disconnects_peers_in_stable_peer_id_order() {
+        let mut runtime = runtime_with_max_peers(3);
+        runtime.start().expect("runtime should start");
+
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(3), "127.0.0.1:30305"))
+            .expect("peer 3 should connect");
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(1), "127.0.0.1:30303"))
+            .expect("peer 1 should connect");
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(2), "127.0.0.1:30304"))
+            .expect("peer 2 should connect");
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 3);
+
+        runtime.shutdown().expect("runtime should shut down");
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(3)),
+                PeerEvent::Connected(mock_peer_id(1)),
+                PeerEvent::Connected(mock_peer_id(2)),
+                PeerEvent::Disconnected(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(2)),
+                PeerEvent::Disconnected(mock_peer_id(3)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 3, 1),
+                expected_peer_log("connected", 1, 2),
+                expected_peer_log("connected", 2, 3),
+                expected_peer_log("disconnected", 1, 2),
+                expected_peer_log("disconnected", 2, 1),
+                expected_peer_log("disconnected", 3, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (3, 3, 0, 0));
+    }
+
+    #[test]
     fn runtime_execute_without_mock_sync_starts_and_stops() {
         let mut runtime = runtime_with_max_peers(1);
 
@@ -548,5 +595,37 @@ mod tests {
             &[expected_peer_log("rejected_max_peers", 1, 0)]
         );
         assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (0, 0, 1, 0));
+    }
+
+    #[test]
+    fn execute_fails_closed_when_called_while_running() {
+        let mut runtime = runtime_with_max_peers(1);
+        runtime.start().expect("runtime should start");
+
+        let err = runtime
+            .execute(false)
+            .expect_err("execute should fail when runtime is already running");
+
+        assert_eq!(
+            err,
+            NodeRuntimeError::InvalidLifecycleState {
+                action: "start",
+                state: RuntimeState::Running,
+            }
+        );
+        assert_eq!(
+            runtime.lifecycle,
+            RuntimeState::Running,
+            "failed execute must not mutate lifecycle when start fails"
+        );
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert!(runtime.sync.peer_manager.events().is_empty());
+        assert!(runtime.sync.peer_manager.lifecycle_logs().is_empty());
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (0, 0, 0, 0));
+
+        runtime
+            .shutdown()
+            .expect("runtime should still shut down cleanly");
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
     }
 }
