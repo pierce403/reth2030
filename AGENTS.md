@@ -88,3 +88,7 @@ Reflection cadence:
 - Added deterministic execution outputs (`TxExecutionResult`, receipts, gas totals).
 - Added integration tests in `crates/reth2030-core/tests/execution_ordering.rs`.
 - Learned pitfall: pre-execution blocks may have empty receipts; validation must allow that.
+- Added `reth2030-rpc` crate with Axum router and JSON-RPC request/response types.
+- Implemented baseline methods: `web3_clientVersion`, `eth_chainId`, `eth_blockNumber`.
+- Added `/engine` route with placeholder bearer-JWT guard and structured auth errors.
+- Added API-level tests using `tower::ServiceExt::oneshot` for success/error shape checks.

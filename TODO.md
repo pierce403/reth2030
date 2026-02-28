@@ -74,16 +74,16 @@ This file tracks implementation work in executable phases.
 - Prepare execution/consensus interface points.
 
 ### Tasks
-- [ ] Create `reth2030-rpc` crate with HTTP JSON-RPC server skeleton.
-- [ ] Implement baseline methods (`web3_clientVersion`, `eth_chainId`, `eth_blockNumber`).
-- [ ] Add Engine API namespace skeleton with JWT auth placeholders.
-- [ ] Define request/response types and error mapping strategy.
-- [ ] Add API-level tests for success and structured error responses.
+- [x] Create `reth2030-rpc` crate with HTTP JSON-RPC server skeleton.
+- [x] Implement baseline methods (`web3_clientVersion`, `eth_chainId`, `eth_blockNumber`).
+- [x] Add Engine API namespace skeleton with JWT auth placeholders.
+- [x] Define request/response types and error mapping strategy.
+- [x] Add API-level tests for success and structured error responses.
 
 ### Acceptance Criteria
-- [ ] Server starts and serves documented baseline RPC methods.
-- [ ] Engine API routes are wired and guarded by auth placeholders.
-- [ ] API tests run in CI and validate stable response shapes.
+- [x] Server starts and serves documented baseline RPC methods.
+- [x] Engine API routes are wired and guarded by auth placeholders.
+- [x] API tests run in CI and validate stable response shapes.
 
 ### Dependencies
 - Depends on: Phase 1 data types and Phase 2 execution outputs.
