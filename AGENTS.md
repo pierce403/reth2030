@@ -117,3 +117,6 @@ Reflection cadence:
 - Added decimal + `0x` hex numeric parsing for vector balances/values to better match Ethereum-style fixtures.
 - Hardened CI by splitting vector conformance into its own `vector-conformance` job so public-suite execution is attempted on every CI run.
 - Added a vectors unit test that replays `vectors/ethereum-state-tests/minimal` and asserts checked-in baseline parity during `cargo test --workspace`.
+- Hardened Engine API auth placeholder parsing: reject duplicate/malformed `Authorization` headers and fail closed when server JWT config is blank.
+- Hardened Engine API flow to enforce auth before request-body decoding, reducing unauthenticated parse surface on `/engine`.
+- Learned pitfall: adding optional structured JSON-RPC error data can trigger `clippy::result_large_err`; boxing large `Err` variants keeps `-D warnings` green.
