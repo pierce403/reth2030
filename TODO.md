@@ -9,15 +9,15 @@ This file tracks implementation work in executable phases.
 - Establish baseline CI and development workflow quality gates.
 
 ### Tasks
-- [ ] Add GitHub Actions CI for `fmt`, `check`, `test`, and `clippy`.
-- [ ] Add pre-commit hooks (optional) for local `fmt` and lint.
-- [ ] Add `CONTRIBUTING.md` with setup and coding workflow.
-- [ ] Add architecture-notes directory for ADR-style decisions.
+- [x] Add GitHub Actions CI for `fmt`, `check`, `test`, and `clippy`.
+- [x] Add pre-commit hooks (optional) for local `fmt` and lint.
+- [x] Add `CONTRIBUTING.md` with setup and coding workflow.
+- [x] Add architecture-notes directory for ADR-style decisions.
 
 ### Acceptance Criteria
-- [ ] PRs run CI checks automatically and block on failure.
-- [ ] New contributors can run all core checks using documented commands.
-- [ ] Build and test steps are reproducible from a clean checkout.
+- [x] PRs run CI checks automatically and block on failure.
+- [x] New contributors can run all core checks using documented commands.
+- [x] Build and test steps are reproducible from a clean checkout.
 
 ### Dependencies
 - Depends on: none.

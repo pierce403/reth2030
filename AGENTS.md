@@ -76,3 +76,7 @@ Reflection cadence:
 - Bootstrapped a 2-crate Rust workspace (`reth2030`, `reth2030-core`).
 - Added baseline CLI and config APIs (`Chain`, `NodeConfig::default_for`).
 - Confirmed milestone-based commit/push workflow as team standard.
+- Added CI at `.github/workflows/ci.yml` with fmt/check/test/clippy gates.
+- Added optional pre-commit hooks via `.pre-commit-config.yaml`.
+- Added contributor onboarding in `CONTRIBUTING.md`.
+- Added ADR docs under `docs/architecture-notes/` (starting at ADR-0001).
