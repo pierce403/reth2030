@@ -2,6 +2,38 @@ use std::collections::BTreeMap;
 
 pub type PeerId = [u8; 16];
 
+#[derive(Debug, Clone, Default)]
+struct PeerLifecycleMetricsStub {
+    connected_total: u64,
+    disconnected_total: u64,
+    rejected_max_peers_total: u64,
+    active_peers: usize,
+}
+
+impl PeerLifecycleMetricsStub {
+    fn record(&mut self, event: &PeerEvent, active_peers: usize) {
+        match event {
+            PeerEvent::Connected(_) => Self::increment(&mut self.connected_total),
+            PeerEvent::Disconnected(_) => Self::increment(&mut self.disconnected_total),
+            PeerEvent::RejectedMaxPeers(_) => Self::increment(&mut self.rejected_max_peers_total),
+        }
+        self.active_peers = active_peers;
+    }
+
+    fn snapshot(&self) -> (u64, u64, u64, usize) {
+        (
+            self.connected_total,
+            self.disconnected_total,
+            self.rejected_max_peers_total,
+            self.active_peers,
+        )
+    }
+
+    fn increment(counter: &mut u64) {
+        *counter = counter.saturating_add(1);
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerInfo {
     pub id: PeerId,
@@ -63,6 +95,8 @@ pub struct PeerManager {
     sessions: BTreeMap<PeerId, PeerSession>,
     next_session_id: u64,
     events: Vec<PeerEvent>,
+    lifecycle_logs: Vec<String>,
+    lifecycle_metrics: PeerLifecycleMetricsStub,
 }
 
 impl PeerManager {
@@ -72,12 +106,14 @@ impl PeerManager {
             sessions: BTreeMap::new(),
             next_session_id: 1,
             events: Vec::new(),
+            lifecycle_logs: Vec::new(),
+            lifecycle_metrics: PeerLifecycleMetricsStub::default(),
         }
     }
 
     pub fn connect(&mut self, peer: PeerInfo) -> Result<(), PeerManagerError> {
         if self.sessions.len() >= self.max_peers && !self.sessions.contains_key(&peer.id) {
-            self.events.push(PeerEvent::RejectedMaxPeers(peer.id));
+            self.record_event(PeerEvent::RejectedMaxPeers(peer.id));
             return Err(PeerManagerError::MaxPeersReached {
                 max_peers: self.max_peers,
             });
@@ -87,14 +123,14 @@ impl PeerManager {
         let peer_id = peer.id;
         let session = PeerSession::new(session_id, peer);
         self.sessions.insert(peer_id, session);
-        self.events.push(PeerEvent::Connected(peer_id));
+        self.record_event(PeerEvent::Connected(peer_id));
         Ok(())
     }
 
     pub fn disconnect(&mut self, peer_id: &PeerId) -> bool {
         let removed = self.sessions.remove(peer_id).is_some();
         if removed {
-            self.events.push(PeerEvent::Disconnected(*peer_id));
+            self.record_event(PeerEvent::Disconnected(*peer_id));
         }
         removed
     }
@@ -126,6 +162,14 @@ impl PeerManager {
         self.events.clear();
     }
 
+    pub fn lifecycle_logs(&self) -> &[String] {
+        self.lifecycle_logs.as_slice()
+    }
+
+    pub fn metrics_snapshot(&self) -> (u64, u64, u64, usize) {
+        self.lifecycle_metrics.snapshot()
+    }
+
     fn allocate_session_id(&mut self) -> Result<u64, PeerManagerError> {
         let session_id = self.next_session_id;
         self.next_session_id = self
@@ -134,6 +178,45 @@ impl PeerManager {
             .ok_or(PeerManagerError::SessionIdOverflow)?;
         Ok(session_id)
     }
+
+    fn record_event(&mut self, event: PeerEvent) {
+        self.events.push(event.clone());
+        self.lifecycle_logs.push(format!(
+            "peer.{} peer_id={} active_peers={}",
+            event_name(&event),
+            event_peer_id(&event),
+            self.sessions.len()
+        ));
+        self.lifecycle_metrics.record(&event, self.sessions.len());
+    }
+}
+
+fn event_name(event: &PeerEvent) -> &'static str {
+    match event {
+        PeerEvent::Connected(_) => "connected",
+        PeerEvent::Disconnected(_) => "disconnected",
+        PeerEvent::RejectedMaxPeers(_) => "rejected_max_peers",
+    }
+}
+
+fn event_peer_id(event: &PeerEvent) -> String {
+    match event {
+        PeerEvent::Connected(peer_id)
+        | PeerEvent::Disconnected(peer_id)
+        | PeerEvent::RejectedMaxPeers(peer_id) => format_peer_id(peer_id),
+    }
+}
+
+fn format_peer_id(peer_id: &PeerId) -> String {
+    let mut out = String::with_capacity(peer_id.len() * 2);
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    for byte in peer_id {
+        out.push(char::from(HEX[(byte >> 4) as usize]));
+        out.push(char::from(HEX[(byte & 0x0f) as usize]));
+    }
+
+    out
 }
 
 #[cfg(test)]
@@ -174,6 +257,20 @@ mod tests {
                 PeerEvent::Connected(peer_id(1))
             ]
         );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (2, 0, 0, 1));
     }
 
     #[test]
@@ -209,6 +306,24 @@ mod tests {
                 PeerEvent::Connected(peer_id(1)),
             ]
         );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.rejected_max_peers peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(2))
+                ),
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (2, 0, 1, 1));
     }
 
     #[test]
@@ -229,6 +344,20 @@ mod tests {
                 PeerEvent::Disconnected(peer_id(1)),
             ]
         );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.disconnected peer_id={} active_peers=0",
+                    format_peer_id(&peer_id(1))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, 1, 0, 0));
     }
 
     #[test]
@@ -259,6 +388,48 @@ mod tests {
         assert_eq!(err, PeerManagerError::SessionIdOverflow);
         assert_eq!(manager.peer_count(), 0);
         assert!(manager.events().is_empty());
+        assert!(manager.lifecycle_logs().is_empty());
+        assert_eq!(manager.metrics_snapshot(), (0, 0, 0, 0));
         assert!(manager.session(&peer_id(1)).is_none());
+    }
+
+    #[test]
+    fn disconnecting_unknown_peer_does_not_emit_observability_signals() {
+        let mut manager = PeerManager::new(2);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("connect must succeed");
+
+        assert!(!manager.disconnect(&peer_id(2)));
+        assert_eq!(manager.peer_count(), 1);
+        assert_eq!(manager.events(), &[PeerEvent::Connected(peer_id(1))]);
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[format!(
+                "peer.connected peer_id={} active_peers=1",
+                format_peer_id(&peer_id(1))
+            )]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, 0, 0, 1));
+    }
+
+    #[test]
+    fn clearing_events_does_not_reset_logs_or_metrics() {
+        let mut manager = PeerManager::new(1);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("connect must succeed");
+
+        manager.clear_events();
+
+        assert!(manager.events().is_empty());
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[format!(
+                "peer.connected peer_id={} active_peers=1",
+                format_peer_id(&peer_id(1))
+            )]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, 0, 0, 1));
     }
 }

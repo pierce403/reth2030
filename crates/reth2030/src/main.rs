@@ -142,6 +142,16 @@ impl NodeRuntime {
             "peer events observed: {}",
             self.sync.peer_manager.events().len()
         );
+        println!(
+            "peer log entries observed: {}",
+            self.sync.peer_manager.lifecycle_logs().len()
+        );
+        let (connected_total, disconnected_total, rejected_total, active_peers) =
+            self.sync.peer_manager.metrics_snapshot();
+        println!(
+            "peer metrics stub: connected_total={} disconnected_total={} rejected_max_peers_total={} active_peers={}",
+            connected_total, disconnected_total, rejected_total, active_peers
+        );
         Ok(())
     }
 
@@ -221,6 +231,11 @@ mod tests {
         NodeRuntime::new(config)
     }
 
+    fn expected_peer_log(action: &str, seed: u8, active_peers: usize) -> String {
+        let peer_id = format!("{seed:02x}").repeat(16);
+        format!("peer.{action} peer_id={peer_id} active_peers={active_peers}")
+    }
+
     #[test]
     fn mock_sync_loop_runs_without_error() {
         let mut runtime = runtime_with_max_peers(1);
@@ -236,6 +251,11 @@ mod tests {
             runtime.sync.peer_manager.events(),
             &[PeerEvent::Connected(mock_peer_id(1))]
         );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[expected_peer_log("connected", 1, 1)]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (1, 0, 0, 1));
 
         runtime.shutdown().expect("runtime should shut down");
         assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
@@ -247,6 +267,14 @@ mod tests {
                 PeerEvent::Disconnected(mock_peer_id(1)),
             ]
         );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("disconnected", 1, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (1, 1, 0, 0));
     }
 
     #[test]
@@ -268,6 +296,11 @@ mod tests {
             runtime.sync.peer_manager.events(),
             &[PeerEvent::RejectedMaxPeers(mock_peer_id(1))]
         );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[expected_peer_log("rejected_max_peers", 1, 0)]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (0, 0, 1, 0));
 
         runtime.shutdown().expect("runtime should shut down");
         assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
@@ -294,6 +327,14 @@ mod tests {
                 PeerEvent::Connected(mock_peer_id(1)),
             ]
         );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("connected", 1, 1),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 0, 0, 1));
 
         runtime.shutdown().expect("runtime should shut down");
         assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
@@ -305,6 +346,15 @@ mod tests {
                 PeerEvent::Disconnected(mock_peer_id(1)),
             ]
         );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("disconnected", 1, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 1, 0, 0));
     }
 
     #[test]
@@ -407,5 +457,15 @@ mod tests {
                 PeerEvent::Disconnected(mock_peer_id(2)),
             ]
         );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("connected", 2, 2),
+                expected_peer_log("disconnected", 1, 1),
+                expected_peer_log("disconnected", 2, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 2, 0, 0));
     }
 }

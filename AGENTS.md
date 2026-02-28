@@ -160,3 +160,5 @@ Reflection cadence:
 - Learned behavior: reconnecting an existing peer rotates its session in-place (new `session_id`) without consuming an additional peer slot.
 - Learned pitfall: session ID allocation should fail closed on `u64` overflow before mutating peer/session state or emitting lifecycle events.
 - Hardened `architecture_notes_contract` ADR content checks to enforce first-line ADR title numbering, single metadata lines, allowed status values, ISO `YYYY-MM-DD` dates, and non-empty ordered required sections.
+- Added explicit peer observability stubs in `PeerManager`: deterministic lifecycle log lines and metrics snapshots (`connected`, `disconnected`, `rejected_max_peers`, `active_peers`).
+- Learned behavior: clearing the transient `PeerEvent` buffer should not reset log/metrics stubs, preserving lifecycle observability across event-polling boundaries.

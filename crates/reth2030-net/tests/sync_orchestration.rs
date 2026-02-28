@@ -84,6 +84,16 @@ fn peer_lifecycle_events_are_observable() {
             PeerEvent::Disconnected(peer_id(0x01)),
         ]
     );
+    assert_eq!(
+        orchestrator.peer_manager.lifecycle_logs(),
+        &[
+            "peer.connected peer_id=01010101010101010101010101010101 active_peers=1".to_string(),
+            "peer.rejected_max_peers peer_id=02020202020202020202020202020202 active_peers=1"
+                .to_string(),
+            "peer.disconnected peer_id=01010101010101010101010101010101 active_peers=0".to_string(),
+        ]
+    );
+    assert_eq!(orchestrator.peer_manager.metrics_snapshot(), (1, 1, 1, 0));
 }
 
 #[test]
