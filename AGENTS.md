@@ -115,3 +115,5 @@ Reflection cadence:
 - Learned pitfall: duplicate fixture `name` values across files caused ambiguous reporting; now rejected at load time.
 - Hardened fixture schema parsing with `deny_unknown_fields` to surface format drift early.
 - Added decimal + `0x` hex numeric parsing for vector balances/values to better match Ethereum-style fixtures.
+- Hardened CI by splitting vector conformance into its own `vector-conformance` job so public-suite execution is attempted on every CI run.
+- Added a vectors unit test that replays `vectors/ethereum-state-tests/minimal` and asserts checked-in baseline parity during `cargo test --workspace`.

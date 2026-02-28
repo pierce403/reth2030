@@ -91,6 +91,8 @@ struct SnapshotReport {
     fixtures: Vec<FixtureRun>,
 }
 
+const SUITE_NAME: &str = "minimal-state-tests";
+
 fn main() {
     if let Err(err) = run() {
         eprintln!("reth2030-vectors: {}", err);
@@ -107,30 +109,11 @@ fn run() -> Result<(), String> {
             args.fixtures_dir.display()
         ));
     }
-
-    let mut runs = Vec::with_capacity(fixtures.len());
-    for fixture in &fixtures {
-        runs.push(execute_fixture(fixture)?);
-    }
-    runs.sort_by(|a, b| a.name.cmp(&b.name));
-
-    let passed = runs.iter().filter(|run| run.passed).count();
-    let total = runs.len();
-    let failed = total.saturating_sub(passed);
-    let pass_rate = (passed as f64) / (total as f64);
-
-    let scorecard = Scorecard {
-        suite: "minimal-state-tests".to_string(),
-        total,
-        passed,
-        failed,
-        pass_rate,
-    };
-
-    let snapshot = SnapshotReport {
-        suite: "minimal-state-tests".to_string(),
-        fixtures: runs,
-    };
+    let (scorecard, snapshot) = generate_reports(&fixtures)?;
+    let total = scorecard.total;
+    let passed = scorecard.passed;
+    let failed = scorecard.failed;
+    let pass_rate = scorecard.pass_rate;
 
     let scorecard_json = serde_json::to_string_pretty(&scorecard).map_err(|err| err.to_string())?;
     let snapshot_json = serde_json::to_string_pretty(&snapshot).map_err(|err| err.to_string())?;
@@ -172,6 +155,37 @@ fn run() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn generate_reports(fixtures: &[Fixture]) -> Result<(Scorecard, SnapshotReport), String> {
+    let mut runs = Vec::with_capacity(fixtures.len());
+    for fixture in fixtures {
+        runs.push(execute_fixture(fixture)?);
+    }
+    runs.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let passed = runs.iter().filter(|run| run.passed).count();
+    let total = runs.len();
+    let failed = total.saturating_sub(passed);
+    let pass_rate = if total == 0 {
+        0.0
+    } else {
+        (passed as f64) / (total as f64)
+    };
+
+    let scorecard = Scorecard {
+        suite: SUITE_NAME.to_string(),
+        total,
+        passed,
+        failed,
+        pass_rate,
+    };
+    let snapshot = SnapshotReport {
+        suite: SUITE_NAME.to_string(),
+        fixtures: runs,
+    };
+
+    Ok((scorecard, snapshot))
 }
 
 fn load_fixtures(fixtures_dir: &Path) -> Result<Vec<Fixture>, String> {
@@ -451,8 +465,8 @@ fn diff_summary(expected: &str, actual: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        execute_fixture, load_fixtures, parse_address, parse_u128, Fixture, FixtureBalance,
-        FixtureExpected, FixtureTx,
+        compare_with_baseline, execute_fixture, generate_reports, load_fixtures, parse_address,
+        parse_u128, Fixture, FixtureBalance, FixtureExpected, FixtureTx,
     };
     use std::{
         fs,
@@ -514,6 +528,28 @@ mod tests {
   }}
 }}"#
         )
+    }
+
+    fn workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    fn no_op_fixture(name: &str, balance: &str) -> Fixture {
+        Fixture {
+            name: name.to_string(),
+            initial_accounts: vec![FixtureBalance {
+                address: "0x1111111111111111111111111111111111111111".to_string(),
+                balance: balance.to_string(),
+            }],
+            transactions: Vec::new(),
+            expected: FixtureExpected {
+                success: true,
+                balances: vec![FixtureBalance {
+                    address: "0x1111111111111111111111111111111111111111".to_string(),
+                    balance: balance.to_string(),
+                }],
+            },
+        }
     }
 
     #[test]
@@ -712,5 +748,72 @@ mod tests {
 
         let err = execute_fixture(&fixture).expect_err("duplicate expected balances must fail");
         assert!(err.contains("duplicate expected balance entry"));
+    }
+
+    #[test]
+    fn generate_reports_sorts_fixtures_by_name() {
+        let fixtures = vec![no_op_fixture("zeta", "7"), no_op_fixture("alpha", "3")];
+        let (scorecard, snapshot) = generate_reports(&fixtures).expect("generate reports");
+
+        assert_eq!(scorecard.total, 2);
+        assert_eq!(scorecard.passed, 2);
+        assert_eq!(scorecard.failed, 0);
+        assert_eq!(scorecard.pass_rate, 1.0);
+
+        let names: Vec<&str> = snapshot
+            .fixtures
+            .iter()
+            .map(|fixture| fixture.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["alpha", "zeta"]);
+    }
+
+    #[test]
+    fn generate_reports_handles_empty_fixture_list() {
+        let fixtures = Vec::new();
+        let (scorecard, snapshot) = generate_reports(&fixtures).expect("generate reports");
+
+        assert_eq!(scorecard.total, 0);
+        assert_eq!(scorecard.passed, 0);
+        assert_eq!(scorecard.failed, 0);
+        assert_eq!(scorecard.pass_rate, 0.0);
+        assert!(snapshot.fixtures.is_empty());
+    }
+
+    #[test]
+    fn compare_with_baseline_reports_line_level_diff() {
+        let temp_dir = TempDir::new("baseline-diff");
+        let baseline_path = temp_dir.path.join("baseline.json");
+        write_file(&baseline_path, "{\n  \"value\": 1\n}\n");
+
+        let err = compare_with_baseline("snapshot", &baseline_path, "{\n  \"value\": 2\n}\n")
+            .expect_err("must detect baseline drift");
+        assert!(err.contains("snapshot regression detected"));
+        assert!(err.contains("line 2:"));
+        assert!(err.contains("expected:   \"value\": 1"));
+        assert!(err.contains("actual:     \"value\": 2"));
+    }
+
+    #[test]
+    fn public_minimal_suite_matches_checked_in_baseline() {
+        let root = workspace_root();
+        let fixtures_dir = root.join("vectors/ethereum-state-tests/minimal");
+        let baseline_scorecard = root.join("vectors/baseline/scorecard.json");
+        let baseline_snapshot = root.join("vectors/baseline/snapshot.json");
+
+        let fixtures = load_fixtures(&fixtures_dir).expect("load public suite fixtures");
+        assert!(
+            !fixtures.is_empty(),
+            "public vector suite must include at least one fixture"
+        );
+
+        let (scorecard, snapshot) = generate_reports(&fixtures).expect("generate reports");
+        let scorecard_json = serde_json::to_string_pretty(&scorecard).expect("serialize scorecard");
+        let snapshot_json = serde_json::to_string_pretty(&snapshot).expect("serialize snapshot");
+
+        compare_with_baseline("scorecard", &baseline_scorecard, &scorecard_json)
+            .expect("scorecard baseline must match");
+        compare_with_baseline("snapshot", &baseline_snapshot, &snapshot_json)
+            .expect("snapshot baseline must match");
     }
 }
