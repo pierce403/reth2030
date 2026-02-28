@@ -1,0 +1,8 @@
+[package]
+name = "reth2030-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core types and config scaffolding for reth2030"
+license = "MIT"
+
+[dependencies]

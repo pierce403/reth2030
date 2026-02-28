@@ -1,0 +1,10 @@
+[package]
+name = "reth2030"
+version = "0.1.0"
+edition = "2021"
+description = "Rust execution-client scaffold inspired by ETH2030"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.5.32", features = ["derive"] }
+reth2030-core = { path = "../reth2030-core" }
