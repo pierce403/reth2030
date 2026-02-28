@@ -173,3 +173,5 @@ Reflection cadence:
 - Added repeated-run execution determinism tests in `reth2030-core` covering mixed tx variants (`Legacy`, `Eip1559`, `Blob`) with payload/blob fields.
 - Learned behavior: execution failures after partial state progress are deterministic across reruns from identical pre-state (stable `ExecutionError` and identical post-failure state snapshot).
 - Learned workflow: when `ralph.sh` picks an already-checked seed task, add a focused contract test that locks the completed outcome (TODO checkmark + workspace/member/API invariants) instead of reopening TODO state.
+- Added `public_vector_ci_seed_contract` tests to lock the checked CI vector-suite seed outcome (`TODO.md` checkmark + automatic workflow triggers + `vector-conformance` job contract + public fixture presence).
+- Learned pitfall: a job-level `if` on `vector-conformance` can silently bypass automatic suite execution even when workflow triggers are correct; keep the job ungated by default.
