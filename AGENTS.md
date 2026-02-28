@@ -65,6 +65,9 @@ cargo run -p reth2030-vectors -- --fixtures-dir vectors/ethereum-state-tests/min
 - `ralph.sh` now defaults to a 2-hour wall-clock budget via
   `RALPH_MAX_RUNTIME_SECONDS=7200` (`0` disables); use this to avoid runaway
   autonomous loops.
+- `ralph.sh` should prefer small TODO items and treat compound tasks as too
+  large; if only large tasks remain, break the chosen task into 5-7 smaller
+  unchecked TODO items before implementation.
 
 ## Rapport and Reflection Notes
 
@@ -135,3 +138,4 @@ Reflection cadence:
 - Learned pitfall: representing toolchain `components` as a comma-delimited scalar is less robust for strict YAML contract testing than an explicit sequence.
 - Learned pitfall: website milestone boards can overstate project readiness; use conservative status language and avoid blanket completion claims unless freshly verified.
 - Hardened `ralph.sh` with a default 2-hour runtime limit and timeout-backed iteration cutoff to prevent unbounded autonomous execution.
+- Added small-task-first `ralph.sh` selection heuristics and a fallback rule to decompose oversized TODO items into 5-7 concrete subtasks.
