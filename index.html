@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>reth2030 - Rust Client POC</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-a: #0b1320;
+        --bg-b: #14243c;
+        --panel: rgba(14, 25, 41, 0.86);
+        --panel-border: rgba(143, 194, 255, 0.26);
+        --text: #ecf4ff;
+        --muted: #a9c0de;
+        --accent: #5ee0ff;
+        --accent-2: #92ffbd;
+        --danger: #ffb88c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Space Grotesk", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 12% 18%, rgba(94, 224, 255, 0.2), transparent 34%),
+          radial-gradient(circle at 84% 10%, rgba(146, 255, 189, 0.16), transparent 34%),
+          linear-gradient(140deg, var(--bg-a), var(--bg-b));
+        line-height: 1.45;
+      }
+
+      .wrap {
+        width: min(1040px, 92vw);
+        margin: 0 auto;
+        padding: 3.25rem 0 2.5rem;
+      }
+
+      .hero {
+        border: 1px solid var(--panel-border);
+        background: var(--panel);
+        border-radius: 24px;
+        padding: 2rem;
+        backdrop-filter: blur(5px);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 6vw, 3.5rem);
+        line-height: 1.05;
+        letter-spacing: 0.01em;
+      }
+
+      .subtitle {
+        margin: 0.95rem 0 1.4rem;
+        max-width: 78ch;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+      }
+
+      .pill {
+        display: inline-block;
+        text-decoration: none;
+        color: var(--text);
+        border: 1px solid var(--panel-border);
+        border-radius: 999px;
+        padding: 0.55rem 0.95rem;
+        transition: transform 0.14s ease, border-color 0.14s ease;
+      }
+
+      .pill:hover {
+        transform: translateY(-1px);
+        border-color: var(--accent);
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      .section {
+        margin-top: 1.45rem;
+        border: 1px solid var(--panel-border);
+        background: var(--panel);
+        border-radius: 20px;
+        padding: 1.25rem;
+      }
+
+      h2 {
+        margin: 0 0 0.7rem;
+        font-size: 1.32rem;
+      }
+
+      .kicker {
+        color: var(--accent-2);
+        font-size: 0.86rem;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+      }
+
+      .progress {
+        margin-top: 1rem;
+      }
+
+      .bar {
+        height: 12px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+      }
+
+      .bar > span {
+        display: block;
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      }
+
+      .phase-grid {
+        margin-top: 1rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.8rem;
+      }
+
+      .phase {
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        padding: 0.8rem;
+        background: rgba(13, 24, 40, 0.9);
+      }
+
+      .phase h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .done {
+        margin-top: 0.38rem;
+        color: var(--accent-2);
+        font-size: 0.92rem;
+        font-weight: 500;
+      }
+
+      .phase p {
+        margin: 0.45rem 0 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .footer-note {
+        margin-top: 1.6rem;
+        font-size: 0.95rem;
+        color: var(--danger);
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 700px) {
+        .hero,
+        .section {
+          padding: 1rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <p class="kicker mono">reth2030 / experimental / rust</p>
+        <h1>Ethereum 2030 vibes, but with Rust and useful receipts.</h1>
+        <p class="subtitle">
+          This is a Rust-side POC inspired by the bigger ETH2030 effort. ETH2030 itself is the
+          ongoing execution-client research project targeting the L1 Strawmap direction.
+          We are building a pragmatic parallel track in Rust while staying aligned with that effort.
+        </p>
+        <div class="pill-row mono">
+          <a class="pill" href="https://eth2030.com/" target="_blank" rel="noopener noreferrer">eth2030.com</a>
+          <a class="pill" href="https://github.com/jiayaoqijia/eth2030" target="_blank" rel="noopener noreferrer">eth2030 upstream (Go)</a>
+          <a class="pill" href="https://github.com/pierce403/reth2030" target="_blank" rel="noopener noreferrer">reth2030 GitHub</a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>POC Status</h2>
+        <p class="small">
+          Milestones mirror <span class="mono">TODO.md</span>. Current completion: <span class="mono">6/6 phases (100%)</span>.
+        </p>
+        <div class="progress">
+          <div class="bar" role="img" aria-label="Milestone progress 100 percent">
+            <span></span>
+          </div>
+        </div>
+
+        <div class="phase-grid">
+          <article class="phase">
+            <h3 class="mono">Phase 0</h3>
+            <div class="done">Complete</div>
+            <p>CI, contributor workflow, pre-commit hooks, and architecture notes.</p>
+          </article>
+          <article class="phase">
+            <h3 class="mono">Phase 1</h3>
+            <div class="done">Complete</div>
+            <p>Execution-layer types plus deterministic in-memory state transitions.</p>
+          </article>
+          <article class="phase">
+            <h3 class="mono">Phase 2</h3>
+            <div class="done">Complete</div>
+            <p>Execution engine abstraction and deterministic block-ordering tests.</p>
+          </article>
+          <article class="phase">
+            <h3 class="mono">Phase 3</h3>
+            <div class="done">Complete</div>
+            <p>JSON-RPC and Engine API skeleton with structured error responses.</p>
+          </article>
+          <article class="phase">
+            <h3 class="mono">Phase 4</h3>
+            <div class="done">Complete</div>
+            <p>Peer/session scaffolding plus mocked sync orchestration in the node CLI.</p>
+          </article>
+          <article class="phase">
+            <h3 class="mono">Phase 5</h3>
+            <div class="done">Complete</div>
+            <p>Vector harness, baseline snapshots, regression detection, and CI artifacts.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>What Works Today</h2>
+        <p class="small">
+          Runnable CLI scaffold, deterministic execution/state tests, RPC skeleton, network/sync mock
+          path, and vector-based conformance reporting.
+        </p>
+        <p class="small mono">Quick run: cargo run -p reth2030 -- --run-mock-sync</p>
+      </section>
+
+      <p class="footer-note">
+        Domain note: if a responsible adult wants this domain for better long-term stewardship,
+        I am willing to transfer it. Contact: <span class="mono">deanpierce.eth</span>
+      </p>
+    </main>
+  </body>
+</html>

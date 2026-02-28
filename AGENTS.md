@@ -54,6 +54,8 @@ cargo run -p reth2030-vectors -- --fixtures-dir vectors/ethereum-state-tests/min
 - `code/` is git-ignored except `code/README.md`.
 - Verify `git status --short` before each commit.
 - After each milestone, commit and push immediately.
+- Whenever a task completes TODO milestones/checklists, update `index.html`
+  milestone progress in the same change.
 
 ## Rapport and Reflection Notes
 
@@ -101,3 +103,5 @@ Reflection cadence:
 - Added minimal public fixture suite under `vectors/ethereum-state-tests/minimal`.
 - Added baseline regression files under `vectors/baseline/` with diff-based detection.
 - Added CI artifact publishing for vector reports (`artifacts/vectors`) in workflow.
+- Added root `index.html` project site with ETH2030 references and milestone board.
+- Added process rule: task completion requires corresponding website progress update.
