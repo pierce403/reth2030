@@ -224,6 +224,7 @@ fn reth2030_net_public_api_is_documented_at_crate_level() {
             "PeerInfo",
             "PeerManager",
             "PeerManagerError",
+            "PeerSession",
             "RecordingExecutionSink",
             "SyncError",
             "SyncOrchestrator",

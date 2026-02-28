@@ -156,3 +156,6 @@ Reflection cadence:
 - Learned behavior: shutdown should disconnect all connected peers deterministically, and `main` should attempt shutdown even when mock sync fails.
 - Hardened `ExecutionEngine` trait boundary to be object-safe (`&mut dyn StateStore`) so backends can be swapped behind `dyn ExecutionEngine`.
 - Learned pitfall: generic trait methods on `ExecutionEngine` block trait-object dispatch and weaken runtime pluggability guarantees.
+- Added explicit `PeerSession` abstraction in `reth2030-net` with monotonic session IDs managed by `PeerManager`.
+- Learned behavior: reconnecting an existing peer rotates its session in-place (new `session_id`) without consuming an additional peer slot.
+- Learned pitfall: session ID allocation should fail closed on `u64` overflow before mutating peer/session state or emitting lifecycle events.

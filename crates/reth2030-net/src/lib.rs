@@ -3,6 +3,7 @@
 //! ## Public API
 //! - `PeerId`: peer identifier primitive.
 //! - `PeerInfo`: peer identity and endpoint metadata.
+//! - `PeerSession`: active peer session metadata.
 //! - `PeerEvent`: observable peer lifecycle event stream.
 //! - `PeerManager`: connect/disconnect and peer-limit manager.
 //! - `PeerManagerError`: peer manager error surface.
@@ -20,7 +21,7 @@
 mod peer;
 mod sync;
 
-pub use peer::{PeerEvent, PeerId, PeerInfo, PeerManager, PeerManagerError};
+pub use peer::{PeerEvent, PeerId, PeerInfo, PeerManager, PeerManagerError, PeerSession};
 pub use sync::{
     BlockBodyRef, ExecutionSink, HeaderRef, MockSyncSource, RecordingExecutionSink, SyncError,
     SyncOrchestrator, SyncReport, SyncSource, SyncStepReport,
