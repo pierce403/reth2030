@@ -217,3 +217,5 @@ Reflection cadence:
 - Learned behavior: max-peer rejections occur before session allocation, so rejected new-peer connects must not consume `PeerManager` session IDs.
 - Learned behavior: runtime shutdown disconnect ordering is deterministic by `PeerId` key order even when peers were connected out of order, so startup/shutdown tests should lock that sequence explicitly.
 - Learned behavior: `NodeRuntime::execute` fails closed without lifecycle mutation if called while already running (start precondition failure path).
+- Added `execution_determinism_seed_contract` tests to lock the checked Phase 2 acceptance criterion (`TODO.md` checkmark + repeated-run determinism across success and fail-closed error paths).
+- Learned behavior: repeated runs are deterministic for mixed contract-creation execution and for fail-closed intrinsic-gas/gas-limit failures, including identical partial post-state snapshots.
