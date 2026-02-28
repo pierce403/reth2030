@@ -139,3 +139,5 @@ Reflection cadence:
 - Learned pitfall: website milestone boards can overstate project readiness; use conservative status language and avoid blanket completion claims unless freshly verified.
 - Hardened `ralph.sh` with a default 2-hour runtime limit and timeout-backed iteration cutoff to prevent unbounded autonomous execution.
 - Added small-task-first `ralph.sh` selection heuristics and a fallback rule to decompose oversized TODO items into 5-7 concrete subtasks.
+- Hardened `reth2030-types` serde boundaries with `deny_unknown_fields` on core protocol structs to fail fast on schema drift.
+- Added exhaustive `reth2030-types` tests for all tx variant accessors, `u128` JSON edge-cases (max values, invalid forms, numeric back-compat), and block/header validation ordering.
