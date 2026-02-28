@@ -175,3 +175,5 @@ Reflection cadence:
 - Learned workflow: when `ralph.sh` picks an already-checked seed task, add a focused contract test that locks the completed outcome (TODO checkmark + workspace/member/API invariants) instead of reopening TODO state.
 - Added `public_vector_ci_seed_contract` tests to lock the checked CI vector-suite seed outcome (`TODO.md` checkmark + automatic workflow triggers + `vector-conformance` job contract + public fixture presence).
 - Learned pitfall: a job-level `if` on `vector-conformance` can silently bypass automatic suite execution even when workflow triggers are correct; keep the job ungated by default.
+- Added `minimal_state_test_subset_seed_contract` tests to lock the checked TODO seed for integrating a minimal Ethereum state-test subset (canonical fixture paths, mixed success/failure coverage, ordering-sensitive failure shape, and hex-value fixture coverage).
+- Learned pitfall: vector subset integration can drift without a task-specific contract, even when broader vector CI and baseline checks still pass.
