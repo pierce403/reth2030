@@ -91,9 +91,9 @@ impl From<StateError> for ExecutionError {
 }
 
 pub trait ExecutionEngine {
-    fn execute_block<S: StateStore>(
+    fn execute_block(
         &self,
-        state: &mut S,
+        state: &mut dyn StateStore,
         block: &Block,
     ) -> Result<BlockExecutionResult, ExecutionError>;
 }
@@ -123,9 +123,9 @@ impl SimpleExecutionEngine {
 }
 
 impl ExecutionEngine for SimpleExecutionEngine {
-    fn execute_block<S: StateStore>(
+    fn execute_block(
         &self,
-        state: &mut S,
+        state: &mut dyn StateStore,
         block: &Block,
     ) -> Result<BlockExecutionResult, ExecutionError> {
         block.validate_basic()?;

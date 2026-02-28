@@ -306,3 +306,78 @@ fn receipt_hash_changes_when_tx_content_changes_with_same_sender_nonce() {
 
     assert_ne!(result_a.receipts[0].tx_hash, result_b.receipts[0].tx_hash);
 }
+
+#[test]
+fn execution_engine_trait_supports_dyn_dispatch_with_state_trait_object() {
+    let engine: Box<dyn ExecutionEngine> = Box::new(SimpleExecutionEngine::default());
+    let block = block_with_txs_and_gas_limit(vec![mk_legacy(addr(0x01), addr(0x02), 0, 7)], 21_000);
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 7,
+            ..Account::default()
+        },
+    );
+
+    let state_store: &mut dyn StateStore = &mut state;
+    let result = engine
+        .execute_block(state_store, &block)
+        .expect("dyn-dispatched engine execution");
+
+    assert_eq!(result.total_gas_used, 21_000);
+    assert_eq!(result.tx_results.len(), 1);
+    assert_eq!(result.receipts.len(), 1);
+
+    let sender = state.get_account(&addr(0x01)).expect("sender account");
+    let recipient = state.get_account(&addr(0x02)).expect("recipient account");
+    assert_eq!(sender.balance, 0);
+    assert_eq!(sender.nonce, 1);
+    assert_eq!(recipient.balance, 7);
+}
+
+#[test]
+fn dyn_dispatched_engine_keeps_pre_state_failures_fail_closed() {
+    let engine: Box<dyn ExecutionEngine> = Box::new(SimpleExecutionEngine::default());
+    let block = block_with_txs(vec![mk_legacy_with_gas(
+        addr(0x01),
+        addr(0x02),
+        0,
+        20_999,
+        1,
+    )]);
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 5,
+            ..Account::default()
+        },
+    );
+
+    let state_store: &mut dyn StateStore = &mut state;
+    let err = engine
+        .execute_block(state_store, &block)
+        .expect_err("pre-state gas validation should fail through trait-object dispatch");
+
+    assert_eq!(
+        err,
+        ExecutionError::TxGasLimitTooLow {
+            tx_gas_limit: 20_999,
+            required: 21_000,
+            tx_index: 0,
+        }
+    );
+
+    let sender = state
+        .get_account(&addr(0x01))
+        .expect("sender account should remain unchanged");
+    assert_eq!(sender.balance, 5);
+    assert_eq!(sender.nonce, 0);
+    assert!(
+        state.get_account(&addr(0x02)).is_none(),
+        "recipient account should not be created when intrinsic gas check fails"
+    );
+}

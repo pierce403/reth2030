@@ -154,3 +154,5 @@ Reflection cadence:
 - Added `conformance_history_contract` tests to enforce valid date ordering, score math invariants, and latest-entry parity with the checked-in scorecard.
 - Hardened `reth2030` runtime lifecycle with explicit `Initialized/Running/Stopped` transitions and fail-closed start/run/shutdown guards.
 - Learned behavior: shutdown should disconnect all connected peers deterministically, and `main` should attempt shutdown even when mock sync fails.
+- Hardened `ExecutionEngine` trait boundary to be object-safe (`&mut dyn StateStore`) so backends can be swapped behind `dyn ExecutionEngine`.
+- Learned pitfall: generic trait methods on `ExecutionEngine` block trait-object dispatch and weaken runtime pluggability guarantees.
