@@ -173,6 +173,8 @@ pub struct Header {
 pub enum ValidationError {
     GasUsedExceedsLimit,
     ReceiptCountMismatch,
+    ReceiptCumulativeGasNotMonotonic,
+    ReceiptFinalGasUsedMismatch,
 }
 
 impl std::fmt::Display for ValidationError {
@@ -185,6 +187,15 @@ impl std::fmt::Display for ValidationError {
                 write!(
                     f,
                     "block.receipts length must match block.transactions length"
+                )
+            }
+            ValidationError::ReceiptCumulativeGasNotMonotonic => {
+                write!(f, "receipt cumulative_gas_used must be non-decreasing")
+            }
+            ValidationError::ReceiptFinalGasUsedMismatch => {
+                write!(
+                    f,
+                    "last receipt cumulative_gas_used must equal header.gas_used"
                 )
             }
         }
@@ -215,6 +226,18 @@ impl Block {
         self.header.validate_basic()?;
         if !self.receipts.is_empty() && self.receipts.len() != self.transactions.len() {
             return Err(ValidationError::ReceiptCountMismatch);
+        }
+        if !self.receipts.is_empty() {
+            let mut last_cumulative_gas = 0_u64;
+            for receipt in &self.receipts {
+                if receipt.cumulative_gas_used < last_cumulative_gas {
+                    return Err(ValidationError::ReceiptCumulativeGasNotMonotonic);
+                }
+                last_cumulative_gas = receipt.cumulative_gas_used;
+            }
+            if last_cumulative_gas != self.header.gas_used {
+                return Err(ValidationError::ReceiptFinalGasUsedMismatch);
+            }
         }
         Ok(())
     }
@@ -648,6 +671,149 @@ mod tests {
     }
 
     #[test]
+    fn block_validate_rejects_non_monotonic_receipt_cumulative_gas() {
+        let block = Block {
+            header: sample_header(),
+            transactions: vec![
+                Transaction::Legacy(LegacyTx {
+                    nonce: 1,
+                    from: addr(0x01),
+                    to: Some(addr(0x02)),
+                    gas_limit: 21_000,
+                    gas_price: 5,
+                    value: 1,
+                    data: Vec::new(),
+                }),
+                Transaction::Legacy(LegacyTx {
+                    nonce: 2,
+                    from: addr(0x03),
+                    to: Some(addr(0x04)),
+                    gas_limit: 21_000,
+                    gas_price: 5,
+                    value: 1,
+                    data: Vec::new(),
+                }),
+            ],
+            receipts: vec![
+                Receipt {
+                    tx_hash: [9; 32],
+                    success: true,
+                    cumulative_gas_used: 30_000,
+                    logs: Vec::new(),
+                },
+                Receipt {
+                    tx_hash: [10; 32],
+                    success: true,
+                    cumulative_gas_used: 20_000,
+                    logs: Vec::new(),
+                },
+            ],
+        };
+
+        assert_eq!(
+            block.validate_basic(),
+            Err(ValidationError::ReceiptCumulativeGasNotMonotonic)
+        );
+    }
+
+    #[test]
+    fn block_validate_rejects_receipt_final_gas_below_header_gas_used() {
+        let block = Block {
+            header: sample_header(),
+            transactions: vec![Transaction::Legacy(LegacyTx {
+                nonce: 1,
+                from: addr(0x01),
+                to: Some(addr(0x02)),
+                gas_limit: 21_000,
+                gas_price: 5,
+                value: 1,
+                data: Vec::new(),
+            })],
+            receipts: vec![Receipt {
+                tx_hash: [9; 32],
+                success: true,
+                cumulative_gas_used: 41_999,
+                logs: Vec::new(),
+            }],
+        };
+
+        assert_eq!(
+            block.validate_basic(),
+            Err(ValidationError::ReceiptFinalGasUsedMismatch)
+        );
+    }
+
+    #[test]
+    fn block_validate_rejects_receipt_final_gas_above_header_gas_used() {
+        let block = Block {
+            header: sample_header(),
+            transactions: vec![Transaction::Legacy(LegacyTx {
+                nonce: 1,
+                from: addr(0x01),
+                to: Some(addr(0x02)),
+                gas_limit: 21_000,
+                gas_price: 5,
+                value: 1,
+                data: Vec::new(),
+            })],
+            receipts: vec![Receipt {
+                tx_hash: [9; 32],
+                success: true,
+                cumulative_gas_used: 42_001,
+                logs: Vec::new(),
+            }],
+        };
+
+        assert_eq!(
+            block.validate_basic(),
+            Err(ValidationError::ReceiptFinalGasUsedMismatch)
+        );
+    }
+
+    #[test]
+    fn block_validate_accepts_monotonic_receipts_matching_header_gas_used() {
+        let block = Block {
+            header: sample_header(),
+            transactions: vec![
+                Transaction::Legacy(LegacyTx {
+                    nonce: 1,
+                    from: addr(0x01),
+                    to: Some(addr(0x02)),
+                    gas_limit: 21_000,
+                    gas_price: 5,
+                    value: 1,
+                    data: Vec::new(),
+                }),
+                Transaction::Legacy(LegacyTx {
+                    nonce: 2,
+                    from: addr(0x03),
+                    to: Some(addr(0x04)),
+                    gas_limit: 21_000,
+                    gas_price: 5,
+                    value: 1,
+                    data: Vec::new(),
+                }),
+            ],
+            receipts: vec![
+                Receipt {
+                    tx_hash: [9; 32],
+                    success: true,
+                    cumulative_gas_used: 21_000,
+                    logs: Vec::new(),
+                },
+                Receipt {
+                    tx_hash: [10; 32],
+                    success: true,
+                    cumulative_gas_used: 42_000,
+                    logs: Vec::new(),
+                },
+            ],
+        };
+
+        assert_eq!(block.validate_basic(), Ok(()));
+    }
+
+    #[test]
     fn block_validate_propagates_header_error_before_receipt_mismatch() {
         let mut header = sample_header();
         header.gas_limit = 21_000;
@@ -701,7 +867,7 @@ mod tests {
         let receipt = Receipt {
             tx_hash: [9; 32],
             success: true,
-            cumulative_gas_used: 21_000,
+            cumulative_gas_used: 42_000,
             logs: vec![LogEntry {
                 address: addr(0x44),
                 topics: vec![[7; 32]],
@@ -736,7 +902,7 @@ mod tests {
             receipts: vec![Receipt {
                 tx_hash: [9; 32],
                 success: true,
-                cumulative_gas_used: 21_000,
+                cumulative_gas_used: 42_000,
                 logs: Vec::new(),
             }],
         };

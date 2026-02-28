@@ -148,3 +148,5 @@ Reflection cadence:
 - Added `architecture_notes_contract` tests that enforce ADR directory presence, strict `ADR-####-slug.md` naming, contiguous numbering, and required ADR sections.
 - Learned pitfall: TODO seed tasks can already be checked; convert those items into contract tests to keep the completed state continuously enforced.
 - Hardened crate-level API documentation with `crate_api_docs_contract` tests that require each library crate to maintain an explicit `## Public API` symbol list matching expected exports.
+- Hardened `reth2030-types` block validation so populated receipts must have non-decreasing `cumulative_gas_used` and a final value equal to `header.gas_used`.
+- Learned pitfall: receipt-bearing block fixtures can silently drift from header gas accounting unless receipt cumulative gas invariants are validated explicitly.
