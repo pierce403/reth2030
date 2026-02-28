@@ -205,3 +205,5 @@ Reflection cadence:
 - Learned pitfall: minimal-flow seed coverage that only exercises legacy transactions can miss representability drift in non-legacy tx variants and validation-order guarantees.
 - Added `peer_lifecycle_observability_seed_contract` tests to lock the checked Phase 4 acceptance criterion (`TODO.md` checkmark + peer observability wiring + required unit/integration coverage for logs/metrics stubs).
 - Learned workflow: when an acceptance criterion is already checked but not explicitly guarded, add a focused seed contract that asserts both API wiring and edge-case test presence to prevent silent observability drift.
+- Added `scaffold_engine_seed_contract` tests to lock the checked Phase 2 task for scaffold execution (`TODO.md` checkmark + `SimpleExecutionEngine` wiring + runtime coverage for empty/no-op/custom intrinsic-gas paths).
+- Learned behavior: `SimpleExecutionEngine::new(0)` provides a no-op gas-accounting mode while still applying state transitions, so scaffold coverage should assert both zero-gas results and state mutation.
