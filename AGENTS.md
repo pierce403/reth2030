@@ -159,3 +159,4 @@ Reflection cadence:
 - Added explicit `PeerSession` abstraction in `reth2030-net` with monotonic session IDs managed by `PeerManager`.
 - Learned behavior: reconnecting an existing peer rotates its session in-place (new `session_id`) without consuming an additional peer slot.
 - Learned pitfall: session ID allocation should fail closed on `u64` overflow before mutating peer/session state or emitting lifecycle events.
+- Hardened `architecture_notes_contract` ADR content checks to enforce first-line ADR title numbering, single metadata lines, allowed status values, ISO `YYYY-MM-DD` dates, and non-empty ordered required sections.
