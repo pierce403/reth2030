@@ -143,3 +143,5 @@ Reflection cadence:
 - Added exhaustive `reth2030-types` tests for all tx variant accessors, `u128` JSON edge-cases (max values, invalid forms, numeric back-compat), and block/header validation ordering.
 - Added `contributor_docs_contract` integration tests to keep `CONTRIBUTING.md` and `README.md` core-check commands present, ordered, and fenced for copy/paste reliability.
 - Learned pitfall: `README.md` Quick Start can drift from contributor quality gates (it was missing the `cargo clippy --workspace --all-targets -- -D warnings` command).
+- Added `reth2030` runtime tests covering `run_mock_sync_once` success, fail-closed behavior at `max_peers=0`, and repeated-run stability.
+- Learned behavior: mocked sync reuses a stable peer ID; repeated runs should stay non-panicking and keep peer count bounded while appending observable peer events.

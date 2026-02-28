@@ -109,3 +109,67 @@ fn main() {
 
     runtime.shutdown();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reth2030_net::PeerEvent;
+
+    fn runtime_with_max_peers(max_peers: usize) -> NodeRuntime {
+        let mut config = NodeConfig::default_for(Chain::Mainnet);
+        config.max_peers = max_peers;
+        NodeRuntime::new(config)
+    }
+
+    #[test]
+    fn mock_sync_loop_runs_without_error() {
+        let mut runtime = runtime_with_max_peers(1);
+
+        runtime
+            .run_mock_sync_once()
+            .expect("mock sync should complete");
+
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 1);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[PeerEvent::Connected(mock_peer_id(1))]
+        );
+    }
+
+    #[test]
+    fn mock_sync_loop_fails_closed_when_no_peer_slots_are_available() {
+        let mut runtime = runtime_with_max_peers(0);
+
+        let err = runtime
+            .run_mock_sync_once()
+            .expect_err("mock sync should fail when max peers is zero");
+
+        assert_eq!(err, "maximum peers reached (0)");
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[PeerEvent::RejectedMaxPeers(mock_peer_id(1))]
+        );
+    }
+
+    #[test]
+    fn mock_sync_loop_can_run_repeatedly_without_panicking() {
+        let mut runtime = runtime_with_max_peers(1);
+
+        runtime
+            .run_mock_sync_once()
+            .expect("first mock sync run should succeed");
+        runtime
+            .run_mock_sync_once()
+            .expect("second mock sync run should also succeed");
+
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 1);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(1)),
+                PeerEvent::Connected(mock_peer_id(1)),
+            ]
+        );
+    }
+}
