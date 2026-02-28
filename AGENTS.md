@@ -179,3 +179,5 @@ Reflection cadence:
 - Learned pitfall: vector subset integration can drift without a task-specific contract, even when broader vector CI and baseline checks still pass.
 - Hardened `public_vector_ci_seed_contract` with path-filter checks and explicit guarantees that `vector-conformance` has no `needs`, no step-level gating, and no `continue-on-error` masking.
 - Learned pitfall: even with correct workflow triggers, push/PR path filters or step-level `continue-on-error` can silently weaken the "public vector suite runs automatically in CI" guarantee.
+- Added `reth2030_rpc_seed_contract` tests to lock the checked RPC skeleton seed outcome (`TODO.md` checkmark + workspace member + crate manifest + router/server wiring invariants).
+- Learned pitfall: without a seed-specific contract, basic RPC skeleton guarantees (root/engine route topology and HTTP server entrypoint wiring) can drift while unrelated RPC behavior tests still pass.
