@@ -193,7 +193,7 @@ pub struct Block {
 impl Block {
     pub fn validate_basic(&self) -> Result<(), ValidationError> {
         self.header.validate_basic()?;
-        if self.receipts.len() != self.transactions.len() {
+        if !self.receipts.is_empty() && self.receipts.len() != self.transactions.len() {
             return Err(ValidationError::ReceiptCountMismatch);
         }
         Ok(())
@@ -299,7 +299,20 @@ mod tests {
         let block = Block {
             header: sample_header(),
             transactions: vec![tx],
-            receipts: Vec::new(),
+            receipts: vec![
+                Receipt {
+                    tx_hash: [9; 32],
+                    success: true,
+                    cumulative_gas_used: 21_000,
+                    logs: Vec::new(),
+                },
+                Receipt {
+                    tx_hash: [10; 32],
+                    success: true,
+                    cumulative_gas_used: 42_000,
+                    logs: Vec::new(),
+                },
+            ],
         };
 
         assert_eq!(

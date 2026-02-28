@@ -84,3 +84,7 @@ Reflection cadence:
 - Added JSON boundary helpers and explicit `u128` string encoding.
 - Added `StateStore` trait plus deterministic `InMemoryState` transitions/tests.
 - Learned pitfall: JSON round-trip of raw `u128` fails unless explicitly encoded.
+- Added `ExecutionEngine` abstraction and `SimpleExecutionEngine` scaffold.
+- Added deterministic execution outputs (`TxExecutionResult`, receipts, gas totals).
+- Added integration tests in `crates/reth2030-core/tests/execution_ordering.rs`.
+- Learned pitfall: pre-execution blocks may have empty receipts; validation must allow that.

@@ -45,6 +45,38 @@ pub trait StateStore {
     fn get_storage(&self, address: &Address, key: &StorageKey) -> Option<StorageValue>;
     fn set_storage(&mut self, address: Address, key: StorageKey, value: StorageValue);
     fn transfer(&mut self, from: Address, to: Address, value: u128) -> Result<(), StateError>;
+
+    fn apply_transaction(&mut self, tx: &Transaction) -> Result<(), StateError> {
+        let from = tx.from();
+        let value = tx.value();
+
+        let mut sender = self.get_account(&from).unwrap_or_default();
+        if sender.balance < value {
+            return Err(StateError::InsufficientBalance {
+                address: from,
+                available: sender.balance,
+                requested: value,
+            });
+        }
+        sender.balance -= value;
+        sender.nonce = sender.nonce.saturating_add(1);
+        self.upsert_account(from, sender);
+
+        if let Some(to) = tx.to() {
+            let mut recipient = self.get_account(&to).unwrap_or_default();
+            recipient.balance = recipient.balance.saturating_add(value);
+            self.upsert_account(to, recipient);
+        }
+
+        Ok(())
+    }
+
+    fn apply_transactions(&mut self, txs: &[Transaction]) -> Result<(), StateError> {
+        for tx in txs {
+            self.apply_transaction(tx)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -55,27 +87,6 @@ pub struct InMemoryState {
 impl InMemoryState {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn apply_transaction(&mut self, tx: &Transaction) -> Result<(), StateError> {
-        let sender = tx.from();
-        let recipient = tx.to();
-        let value = tx.value();
-
-        if let Some(to) = recipient {
-            self.transfer(sender, to, value)?;
-        } else {
-            self.debit_and_bump_nonce(sender, value)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn apply_transactions(&mut self, txs: &[Transaction]) -> Result<(), StateError> {
-        for tx in txs {
-            self.apply_transaction(tx)?;
-        }
-        Ok(())
     }
 
     pub fn snapshot(&self) -> BTreeMap<Address, Account> {

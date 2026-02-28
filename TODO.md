@@ -52,16 +52,16 @@ This file tracks implementation work in executable phases.
 - Allow replacement of execution backend without rewiring the whole node.
 
 ### Tasks
-- [ ] Define an `ExecutionEngine` trait in core.
-- [ ] Implement a scaffold engine (no-op or simplified execution path).
-- [ ] Add gas accounting placeholders and explicit TODO markers for fork rules.
-- [ ] Add deterministic execution-result types (status, gas used, logs).
-- [ ] Add integration tests for multi-transaction block execution ordering.
+- [x] Define an `ExecutionEngine` trait in core.
+- [x] Implement a scaffold engine (no-op or simplified execution path).
+- [x] Add gas accounting placeholders and explicit TODO markers for fork rules.
+- [x] Add deterministic execution-result types (status, gas used, logs).
+- [x] Add integration tests for multi-transaction block execution ordering.
 
 ### Acceptance Criteria
-- [ ] A block execution pipeline exists end-to-end in-process.
-- [ ] Execution output is deterministic under repeated runs.
-- [ ] Engine abstraction boundary is stable and documented.
+- [x] A block execution pipeline exists end-to-end in-process.
+- [x] Execution output is deterministic under repeated runs.
+- [x] Engine abstraction boundary is stable and documented.
 
 ### Dependencies
 - Depends on: Phase 1 types + state model.
