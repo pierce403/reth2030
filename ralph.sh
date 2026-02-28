@@ -7,6 +7,7 @@ AGENTS_FILE="$ROOT_DIR/AGENTS.md"
 LOG_FILE="${RALPH_LOG_FILE:-$ROOT_DIR/ralph.log}"
 SLEEP_SECONDS="${RALPH_SLEEP_SECONDS:-5}"
 MAX_ITERS="${RALPH_MAX_ITERS:-0}"
+MAX_RUNTIME_SECONDS="${RALPH_MAX_RUNTIME_SECONDS:-7200}"
 
 if ! command -v codex >/dev/null 2>&1; then
   echo "codex CLI is not installed or not on PATH" >&2
@@ -20,6 +21,11 @@ fi
 
 if [[ ! -f "$AGENTS_FILE" ]]; then
   echo "Missing AGENTS file: $AGENTS_FILE" >&2
+  exit 1
+fi
+
+if ! [[ "$MAX_RUNTIME_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "RALPH_MAX_RUNTIME_SECONDS must be a non-negative integer" >&2
   exit 1
 fi
 
@@ -76,8 +82,25 @@ log_line() {
 
 trap 'log_line "Received interrupt; exiting loop."; exit 0' INT TERM
 
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+fi
+
+start_epoch="$(date +%s)"
+
 iteration=1
 while true; do
+  now_epoch="$(date +%s)"
+  elapsed="$((now_epoch - start_epoch))"
+
+  if ((MAX_RUNTIME_SECONDS > 0)) && ((elapsed >= MAX_RUNTIME_SECONDS)); then
+    log_line "Reached RALPH_MAX_RUNTIME_SECONDS=$MAX_RUNTIME_SECONDS; exiting loop."
+    break
+  fi
+
   if [[ "$MAX_ITERS" =~ ^[0-9]+$ ]] && ((MAX_ITERS > 0)) && ((iteration > MAX_ITERS)); then
     log_line "Reached RALPH_MAX_ITERS=$MAX_ITERS; exiting loop."
     break
@@ -87,11 +110,40 @@ while true; do
   prompt="$(build_prompt "$seed_task")"
 
   log_line "Iteration $iteration starting. Seed task: $seed_task"
-  codex exec \
-    --dangerously-bypass-approvals-and-sandbox \
-    -C "$ROOT_DIR" \
-    "$prompt" 2>&1 | tee -a "$LOG_FILE"
-  status=${PIPESTATUS[0]}
+
+  if ((MAX_RUNTIME_SECONDS > 0)); then
+    now_epoch="$(date +%s)"
+    remaining="$((MAX_RUNTIME_SECONDS - (now_epoch - start_epoch)))"
+    if ((remaining <= 0)); then
+      log_line "Reached RALPH_MAX_RUNTIME_SECONDS=$MAX_RUNTIME_SECONDS before launching iteration; exiting loop."
+      break
+    fi
+  else
+    remaining=0
+  fi
+
+  if ((MAX_RUNTIME_SECONDS > 0)) && [[ -n "$TIMEOUT_CMD" ]]; then
+    "$TIMEOUT_CMD" --foreground "${remaining}s" \
+      codex exec \
+      --dangerously-bypass-approvals-and-sandbox \
+      -C "$ROOT_DIR" \
+      "$prompt" 2>&1 | tee -a "$LOG_FILE"
+    status=${PIPESTATUS[0]}
+    if ((status == 124)); then
+      log_line "Iteration $iteration hit remaining runtime budget (${remaining}s) and was terminated."
+      break
+    fi
+  else
+    if ((MAX_RUNTIME_SECONDS > 0)) && [[ -z "$TIMEOUT_CMD" ]]; then
+      log_line "No timeout command found; runtime limit will apply between iterations only."
+    fi
+    codex exec \
+      --dangerously-bypass-approvals-and-sandbox \
+      -C "$ROOT_DIR" \
+      "$prompt" 2>&1 | tee -a "$LOG_FILE"
+    status=${PIPESTATUS[0]}
+  fi
+
   log_line "Iteration $iteration finished with status $status"
 
   iteration=$((iteration + 1))
