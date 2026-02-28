@@ -94,7 +94,7 @@ impl InMemoryState {
     }
 
     fn debit_and_bump_nonce(&mut self, address: Address, amount: u128) -> Result<(), StateError> {
-        let account = self.accounts.entry(address).or_default();
+        let mut account = self.accounts.get(&address).cloned().unwrap_or_default();
         if account.balance < amount {
             return Err(StateError::InsufficientBalance {
                 address,
@@ -104,6 +104,7 @@ impl InMemoryState {
         }
         account.balance -= amount;
         account.nonce = account.nonce.saturating_add(1);
+        self.accounts.insert(address, account);
         Ok(())
     }
 }
@@ -191,6 +192,38 @@ mod tests {
     }
 
     #[test]
+    fn set_storage_preserves_existing_account_fields_and_other_keys() {
+        let mut state = InMemoryState::new();
+        let preserved_key = [0x09; 32];
+        let preserved_value = [0x0a; 32];
+        let target_key = [0x11; 32];
+        let target_value = [0x22; 32];
+
+        let mut storage = std::collections::BTreeMap::new();
+        storage.insert(preserved_key, preserved_value);
+        state.upsert_account(
+            addr(0x01),
+            Account {
+                nonce: 9,
+                balance: 777,
+                code: vec![0xde, 0xad, 0xbe, 0xef],
+                storage,
+            },
+        );
+
+        state.set_storage(addr(0x01), target_key, target_value);
+
+        let account = state
+            .get_account(&addr(0x01))
+            .expect("account must remain present");
+        assert_eq!(account.nonce, 9);
+        assert_eq!(account.balance, 777);
+        assert_eq!(account.code, vec![0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(account.storage.get(&preserved_key), Some(&preserved_value));
+        assert_eq!(account.storage.get(&target_key), Some(&target_value));
+    }
+
+    #[test]
     fn transfer_updates_balances_and_nonce() {
         let mut state = InMemoryState::new();
         state.upsert_account(
@@ -262,6 +295,43 @@ mod tests {
         );
         assert_eq!(state.snapshot(), before);
         assert_eq!(state.get_account(&addr(0xbb)), None);
+    }
+
+    #[test]
+    fn transfer_from_missing_sender_is_atomic() {
+        let mut state = InMemoryState::new();
+        let before = state.snapshot();
+
+        let err = state
+            .transfer(addr(0xaa), addr(0xbb), 1)
+            .expect_err("must fail");
+        assert_eq!(
+            err,
+            StateError::InsufficientBalance {
+                address: addr(0xaa),
+                available: 0,
+                requested: 1,
+            }
+        );
+        assert_eq!(state.snapshot(), before);
+        assert_eq!(state.get_account(&addr(0xaa)), None);
+        assert_eq!(state.get_account(&addr(0xbb)), None);
+    }
+
+    #[test]
+    fn zero_value_transfer_from_missing_sender_creates_accounts_deterministically() {
+        let mut state = InMemoryState::new();
+
+        state
+            .transfer(addr(0xaa), addr(0xbb), 0)
+            .expect("zero-value transfer");
+
+        let from = state.get_account(&addr(0xaa)).expect("sender account");
+        let to = state.get_account(&addr(0xbb)).expect("recipient account");
+        assert_eq!(from.balance, 0);
+        assert_eq!(from.nonce, 1);
+        assert_eq!(to.balance, 0);
+        assert_eq!(to.nonce, 0);
     }
 
     #[test]

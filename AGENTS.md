@@ -198,3 +198,6 @@ Reflection cadence:
 - Learned pitfall: even with a valid vector command and ungated job, automatic CI guarantees can still be weakened by job-level `continue-on-error`, non-upload step `if` guards, or shell fragments like `|| true`/`set +e` that mask vector failures.
 - Hardened `minimal_state_test_subset_seed_contract` with fixture arithmetic/order invariants (successful transfer conservation, fail-closed insufficient-balance behavior, and partial-progress ordering failure semantics).
 - Learned pitfall: checking only fixture presence/name/success flags is insufficient; minimal subset contracts should also lock decimal/hex encoding mix and transfer-balance arithmetic to prevent semantic drift.
+- Added `state_transition_seed_contract` tests to lock the checked Phase 1 account/storage transition seed (`TODO.md` checkmark + required state-unit coverage + fail-closed missing-sender transfer behavior).
+- Hardened `InMemoryState::transfer` fail-closed semantics by avoiding sender account creation on insufficient-balance errors for previously missing senders.
+- Learned pitfall: using `entry(...).or_default()` before insufficient-balance validation can silently mutate state on failed transfers; validate first, then persist mutations.
