@@ -145,3 +145,5 @@ Reflection cadence:
 - Learned pitfall: `README.md` Quick Start can drift from contributor quality gates (it was missing the `cargo clippy --workspace --all-targets -- -D warnings` command).
 - Added `reth2030` runtime tests covering `run_mock_sync_once` success, fail-closed behavior at `max_peers=0`, and repeated-run stability.
 - Learned behavior: mocked sync reuses a stable peer ID; repeated runs should stay non-panicking and keep peer count bounded while appending observable peer events.
+- Added `architecture_notes_contract` tests that enforce ADR directory presence, strict `ADR-####-slug.md` naming, contiguous numbering, and required ADR sections.
+- Learned pitfall: TODO seed tasks can already be checked; convert those items into contract tests to keep the completed state continuously enforced.
