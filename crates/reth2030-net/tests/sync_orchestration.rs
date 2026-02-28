@@ -1,9 +1,66 @@
 use reth2030_net::{
-    MockSyncSource, PeerEvent, PeerInfo, RecordingExecutionSink, SyncError, SyncOrchestrator,
+    BlockBodyRef, HeaderRef, MockSyncSource, PeerEvent, PeerInfo, RecordingExecutionSink,
+    SyncError, SyncOrchestrator, SyncSource,
 };
+use std::collections::BTreeMap;
 
 fn peer_id(byte: u8) -> [u8; 16] {
     [byte; 16]
+}
+
+#[derive(Debug, Clone)]
+struct FixedHeaderSource {
+    headers: Vec<HeaderRef>,
+    tx_counts: BTreeMap<u64, usize>,
+    ignore_limit: bool,
+}
+
+impl FixedHeaderSource {
+    fn with_tx_counts(entries: &[(u64, usize)]) -> Self {
+        let mut tx_counts = BTreeMap::new();
+        let headers = entries
+            .iter()
+            .map(|(number, tx_count)| {
+                tx_counts.insert(*number, *tx_count);
+                HeaderRef {
+                    number: *number,
+                    hash: test_hash(*number),
+                }
+            })
+            .collect();
+        Self {
+            headers,
+            tx_counts,
+            ignore_limit: false,
+        }
+    }
+
+    fn ignoring_limit(mut self) -> Self {
+        self.ignore_limit = true;
+        self
+    }
+}
+
+impl SyncSource for FixedHeaderSource {
+    fn fetch_headers(&self, start: u64, limit: usize) -> Vec<HeaderRef> {
+        let filtered = self.headers.iter().filter(|header| header.number >= start);
+        if self.ignore_limit {
+            filtered.cloned().collect()
+        } else {
+            filtered.take(limit).cloned().collect()
+        }
+    }
+
+    fn fetch_body(&self, header: &HeaderRef) -> BlockBodyRef {
+        let tx_count = self.tx_counts.get(&header.number).copied().unwrap_or(0);
+        BlockBodyRef { tx_count }
+    }
+}
+
+fn test_hash(number: u64) -> [u8; 32] {
+    let mut hash = [0_u8; 32];
+    hash[..8].copy_from_slice(&number.to_be_bytes());
+    hash
 }
 
 #[test]
@@ -80,4 +137,118 @@ fn execution_failures_are_mapped_to_sync_error() {
             reason: "forced failure".to_string(),
         }
     );
+    assert_eq!(sink.executed(), &[(7, 1)]);
+}
+
+#[test]
+fn sync_rejects_sources_that_exceed_requested_limit() {
+    let source = FixedHeaderSource::with_tx_counts(&[(1, 2), (2, 3)]).ignoring_limit();
+    let mut sink = RecordingExecutionSink::new();
+    let mut orchestrator = SyncOrchestrator::new(1);
+
+    let err = orchestrator
+        .run_once(&source, &mut sink, 1, 1)
+        .expect_err("source must not return more headers than requested");
+
+    assert_eq!(
+        err,
+        SyncError::HeaderBatchTooLarge {
+            limit: 1,
+            received: 2,
+        }
+    );
+    assert!(sink.executed().is_empty());
+}
+
+#[test]
+fn sync_rejects_sequence_when_start_header_is_missing() {
+    let source = FixedHeaderSource::with_tx_counts(&[(5, 1)]);
+    let mut sink = RecordingExecutionSink::new();
+    let mut orchestrator = SyncOrchestrator::new(1);
+
+    let err = orchestrator
+        .run_once(&source, &mut sink, 4, 1)
+        .expect_err("first header should match start");
+
+    assert_eq!(
+        err,
+        SyncError::InvalidHeaderSequence {
+            expected: 4,
+            got: 5,
+        }
+    );
+    assert!(sink.executed().is_empty());
+}
+
+#[test]
+fn sync_rejects_gapped_header_sequence() {
+    let source = FixedHeaderSource::with_tx_counts(&[(4, 1), (6, 1)]);
+    let mut sink = RecordingExecutionSink::new();
+    let mut orchestrator = SyncOrchestrator::new(1);
+
+    let err = orchestrator
+        .run_once(&source, &mut sink, 4, 2)
+        .expect_err("gap in sequence must be rejected");
+
+    assert_eq!(
+        err,
+        SyncError::InvalidHeaderSequence {
+            expected: 5,
+            got: 6,
+        }
+    );
+    assert!(sink.executed().is_empty());
+}
+
+#[test]
+fn sync_rejects_duplicate_header_numbers() {
+    let source = FixedHeaderSource::with_tx_counts(&[(4, 1), (4, 2)]);
+    let mut sink = RecordingExecutionSink::new();
+    let mut orchestrator = SyncOrchestrator::new(1);
+
+    let err = orchestrator
+        .run_once(&source, &mut sink, 4, 2)
+        .expect_err("duplicate header should be rejected");
+
+    assert_eq!(
+        err,
+        SyncError::InvalidHeaderSequence {
+            expected: 5,
+            got: 4,
+        }
+    );
+    assert!(sink.executed().is_empty());
+}
+
+#[test]
+fn sync_detects_header_sequence_overflow() {
+    let source = FixedHeaderSource::with_tx_counts(&[(u64::MAX, 1), (u64::MAX, 2)]);
+    let mut sink = RecordingExecutionSink::new();
+    let mut orchestrator = SyncOrchestrator::new(1);
+
+    let err = orchestrator
+        .run_once(&source, &mut sink, u64::MAX, 2)
+        .expect_err("sequence overflow must be rejected");
+
+    assert_eq!(
+        err,
+        SyncError::HeaderSequenceOverflow {
+            last_header: u64::MAX,
+        }
+    );
+    assert!(sink.executed().is_empty());
+}
+
+#[test]
+fn sync_with_zero_limit_is_a_noop() {
+    let source = MockSyncSource::with_tx_counts(&[(1, 1), (2, 2)]);
+    let mut sink = RecordingExecutionSink::new();
+    let mut orchestrator = SyncOrchestrator::new(1);
+
+    let report = orchestrator
+        .run_once(&source, &mut sink, 1, 0)
+        .expect("zero limit should return an empty batch");
+
+    assert!(report.steps.is_empty());
+    assert!(sink.executed().is_empty());
 }

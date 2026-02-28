@@ -122,3 +122,5 @@ Reflection cadence:
 - Learned pitfall: adding optional structured JSON-RPC error data can trigger `clippy::result_large_err`; boxing large `Err` variants keeps `-D warnings` green.
 - Hardened `SimpleExecutionEngine` gas accounting: reject txs when intrinsic gas exceeds per-tx `gas_limit` and detect `u64` cumulative gas overflow explicitly.
 - Learned pitfall: receipt pseudo-hash based only on `(from, nonce, index)` can collide for distinct tx content; hash derivation now includes full tx payload and fee fields.
+- Hardened sync orchestration to fail closed on malformed header batches: reject over-limit responses, non-contiguous/duplicate header numbers, and `u64` sequence overflow before fetching bodies or executing blocks.
+- Added deterministic malformed-source sync tests covering limit violations, missing start header, gaps, duplicates, overflow, zero-limit no-op, and partial execution before failure.

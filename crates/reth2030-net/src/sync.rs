@@ -38,12 +38,30 @@ pub struct SyncReport {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncError {
+    HeaderBatchTooLarge { limit: usize, received: usize },
+    InvalidHeaderSequence { expected: u64, got: u64 },
+    HeaderSequenceOverflow { last_header: u64 },
     ExecutionFailed { header_number: u64, reason: String },
 }
 
 impl std::fmt::Display for SyncError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            SyncError::HeaderBatchTooLarge { limit, received } => write!(
+                f,
+                "sync source returned {} headers, exceeding limit {}",
+                received, limit
+            ),
+            SyncError::InvalidHeaderSequence { expected, got } => write!(
+                f,
+                "sync source returned out-of-sequence header: expected {}, got {}",
+                expected, got
+            ),
+            SyncError::HeaderSequenceOverflow { last_header } => write!(
+                f,
+                "sync header sequence overflowed after header {}",
+                last_header
+            ),
             SyncError::ExecutionFailed {
                 header_number,
                 reason,
@@ -86,6 +104,7 @@ impl SyncOrchestrator {
         limit: usize,
     ) -> Result<SyncReport, SyncError> {
         let headers = source.fetch_headers(start, limit);
+        validate_header_batch(start, limit, &headers)?;
         let mut steps = Vec::with_capacity(headers.len());
 
         for header in headers {
@@ -105,6 +124,35 @@ impl SyncOrchestrator {
 
         Ok(SyncReport { steps })
     }
+}
+
+fn validate_header_batch(start: u64, limit: usize, headers: &[HeaderRef]) -> Result<(), SyncError> {
+    if headers.len() > limit {
+        return Err(SyncError::HeaderBatchTooLarge {
+            limit,
+            received: headers.len(),
+        });
+    }
+
+    let mut expected = start;
+    for (index, header) in headers.iter().enumerate() {
+        if header.number != expected {
+            return Err(SyncError::InvalidHeaderSequence {
+                expected,
+                got: header.number,
+            });
+        }
+
+        if index < headers.len().saturating_sub(1) {
+            expected = expected
+                .checked_add(1)
+                .ok_or(SyncError::HeaderSequenceOverflow {
+                    last_header: header.number,
+                })?;
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
