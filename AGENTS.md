@@ -181,3 +181,5 @@ Reflection cadence:
 - Learned pitfall: even with correct workflow triggers, push/PR path filters or step-level `continue-on-error` can silently weaken the "public vector suite runs automatically in CI" guarantee.
 - Added `reth2030_rpc_seed_contract` tests to lock the checked RPC skeleton seed outcome (`TODO.md` checkmark + workspace member + crate manifest + router/server wiring invariants).
 - Learned pitfall: without a seed-specific contract, basic RPC skeleton guarantees (root/engine route topology and HTTP server entrypoint wiring) can drift while unrelated RPC behavior tests still pass.
+- Added `mock_sync_seed_contract` tests to lock the checked Phase 4 seed outcome (`TODO.md` checkmark + mocked-sync CLI/runtime wiring + runtime non-panicking/fail-closed test coverage contract).
+- Learned pitfall: mocked sync readiness can drift if `main.rs` test coverage is slimmed down; enforce presence of success, fail-closed, and repeated-run runtime tests via a seed contract.
