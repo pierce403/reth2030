@@ -219,3 +219,5 @@ Reflection cadence:
 - Learned behavior: `NodeRuntime::execute` fails closed without lifecycle mutation if called while already running (start precondition failure path).
 - Added `execution_determinism_seed_contract` tests to lock the checked Phase 2 acceptance criterion (`TODO.md` checkmark + repeated-run determinism across success and fail-closed error paths).
 - Learned behavior: repeated runs are deterministic for mixed contract-creation execution and for fail-closed intrinsic-gas/gas-limit failures, including identical partial post-state snapshots.
+- Added `conformance_metric_seed_contract` tests to lock the checked Phase 5 acceptance criterion (`TODO.md` checkmark + multi-entry conformance timeline invariants + latest-entry scorecard parity + docs append-only guidance).
+- Learned pitfall: a single history snapshot does not satisfy "tracked over time"; require at least two strictly increasing `recorded_on` entries in `vectors/baseline/conformance-history.json`.

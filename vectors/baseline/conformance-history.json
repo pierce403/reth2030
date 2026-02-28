@@ -3,6 +3,14 @@
   "description": "Historical scorecard trend for vectors/ethereum-state-tests/minimal.",
   "entries": [
     {
+      "recorded_on": "2026-02-27",
+      "suite": "minimal-state-tests",
+      "total": 4,
+      "passed": 3,
+      "failed": 1,
+      "pass_rate": 0.75
+    },
+    {
       "recorded_on": "2026-02-28",
       "suite": "minimal-state-tests",
       "total": 4,
