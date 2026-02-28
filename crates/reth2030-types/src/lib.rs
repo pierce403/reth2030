@@ -786,6 +786,126 @@ mod tests {
     }
 
     #[test]
+    fn transaction_deserialization_rejects_invalid_address_lengths() {
+        let invalid_length_cases = vec![
+            (
+                "legacy.from",
+                json!({
+                    "tx_type": "legacy",
+                    "nonce": 1,
+                    "from": vec![1_u8; 19],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "gas_price": "1",
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "legacy.to",
+                json!({
+                    "tx_type": "legacy",
+                    "nonce": 1,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 21],
+                    "gas_limit": 21_000,
+                    "gas_price": "1",
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "eip1559.from",
+                json!({
+                    "tx_type": "eip1559",
+                    "nonce": 2,
+                    "from": vec![3_u8; 0],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "blob.to",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![4_u8; 20],
+                    "to": vec![5_u8; 31],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![9_u8; 32]]
+                }),
+            ),
+        ];
+
+        for (field, candidate) in invalid_length_cases {
+            let err = serde_json::from_value::<Transaction>(candidate)
+                .expect_err("invalid address length must fail")
+                .to_string();
+            assert!(
+                err.contains("invalid length"),
+                "unexpected error for {field}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn transaction_deserialization_rejects_invalid_blob_hash_lengths() {
+        let invalid_length_cases = vec![
+            (
+                "blob_versioned_hashes[0]",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![4_u8; 20],
+                    "to": vec![5_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![9_u8; 31]]
+                }),
+            ),
+            (
+                "blob_versioned_hashes[1]",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![4_u8; 20],
+                    "to": vec![5_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![9_u8; 32], vec![8_u8; 33]]
+                }),
+            ),
+        ];
+
+        for (field, candidate) in invalid_length_cases {
+            let err = serde_json::from_value::<Transaction>(candidate)
+                .expect_err("invalid blob hash length must fail")
+                .to_string();
+            assert!(
+                err.contains("invalid length"),
+                "unexpected error for {field}: {err}"
+            );
+        }
+    }
+
+    #[test]
     fn header_validate_accepts_equal_gas_used_and_limit() {
         let mut header = sample_header();
         header.gas_used = header.gas_limit;
@@ -1003,6 +1123,49 @@ mod tests {
     }
 
     #[test]
+    fn block_validate_accepts_equal_cumulative_gas_between_receipts() {
+        let block = Block {
+            header: sample_header(),
+            transactions: vec![
+                Transaction::Legacy(LegacyTx {
+                    nonce: 1,
+                    from: addr(0x01),
+                    to: Some(addr(0x02)),
+                    gas_limit: 21_000,
+                    gas_price: 5,
+                    value: 1,
+                    data: Vec::new(),
+                }),
+                Transaction::Legacy(LegacyTx {
+                    nonce: 2,
+                    from: addr(0x03),
+                    to: Some(addr(0x04)),
+                    gas_limit: 21_000,
+                    gas_price: 5,
+                    value: 1,
+                    data: Vec::new(),
+                }),
+            ],
+            receipts: vec![
+                Receipt {
+                    tx_hash: [9; 32],
+                    success: true,
+                    cumulative_gas_used: 42_000,
+                    logs: Vec::new(),
+                },
+                Receipt {
+                    tx_hash: [10; 32],
+                    success: false,
+                    cumulative_gas_used: 42_000,
+                    logs: Vec::new(),
+                },
+            ],
+        };
+
+        assert_eq!(block.validate_basic(), Ok(()));
+    }
+
+    #[test]
     fn block_validate_propagates_header_error_before_receipt_mismatch() {
         let mut header = sample_header();
         header.gas_limit = 21_000;
@@ -1090,6 +1253,32 @@ mod tests {
     }
 
     #[test]
+    fn header_deserialization_rejects_invalid_hash_lengths() {
+        let length_cases = vec![
+            ("parent_hash", 31_usize),
+            ("state_root", 33_usize),
+            ("transactions_root", 0_usize),
+            ("receipts_root", 1_usize),
+        ];
+
+        for (field, len) in length_cases {
+            let mut value = serde_json::to_value(sample_header()).expect("serialize header");
+            value
+                .as_object_mut()
+                .expect("header must serialize to object")
+                .insert(field.to_owned(), json!(vec![7_u8; len]));
+
+            let err = serde_json::from_value::<Header>(value)
+                .expect_err("invalid hash length must fail")
+                .to_string();
+            assert!(
+                err.contains("invalid length"),
+                "unexpected error for {field}: {err}"
+            );
+        }
+    }
+
+    #[test]
     fn receipt_deserialization_rejects_unknown_fields() {
         let receipt = Receipt {
             tx_hash: [9; 32],
@@ -1115,6 +1304,41 @@ mod tests {
     }
 
     #[test]
+    fn receipt_deserialization_rejects_invalid_hash_lengths() {
+        let tx_hash_value = json!({
+            "tx_hash": vec![9_u8; 31],
+            "success": true,
+            "cumulative_gas_used": 42_000,
+            "logs": []
+        });
+        let tx_hash_err = serde_json::from_value::<Receipt>(tx_hash_value)
+            .expect_err("invalid tx hash length must fail")
+            .to_string();
+        assert!(
+            tx_hash_err.contains("invalid length"),
+            "unexpected tx_hash error: {tx_hash_err}"
+        );
+
+        let topic_value = json!({
+            "tx_hash": vec![9_u8; 32],
+            "success": true,
+            "cumulative_gas_used": 42_000,
+            "logs": [{
+                "address": vec![4_u8; 20],
+                "topics": [vec![7_u8; 31]],
+                "data": []
+            }]
+        });
+        let topic_err = serde_json::from_value::<Receipt>(topic_value)
+            .expect_err("invalid topic hash length must fail")
+            .to_string();
+        assert!(
+            topic_err.contains("invalid length"),
+            "unexpected topic error: {topic_err}"
+        );
+    }
+
+    #[test]
     fn log_entry_deserialization_rejects_unknown_fields() {
         let log_entry = LogEntry {
             address: addr(0x44),
@@ -1132,6 +1356,18 @@ mod tests {
             .expect_err("unknown log entry field must fail")
             .to_string();
         assert!(err.contains("unknown field"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn log_entry_deserialization_rejects_invalid_address_length() {
+        let err = serde_json::from_value::<LogEntry>(json!({
+            "address": vec![0_u8; 19],
+            "topics": [vec![7_u8; 32]],
+            "data": []
+        }))
+        .expect_err("invalid address length must fail")
+        .to_string();
+        assert!(err.contains("invalid length"), "unexpected error: {err}");
     }
 
     #[test]

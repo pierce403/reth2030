@@ -210,3 +210,5 @@ Reflection cadence:
 - Added `reth2030_net_seed_contract` tests to lock the checked Phase 4 seed outcome (`TODO.md` checkmark + workspace member + crate manifest + peer/session abstraction wiring + edge-case unit-test coverage contract).
 - Learned behavior: `PeerManager::new(0)` must fail closed on first connect while still emitting rejected-peer observability signals (event/log/metrics).
 - Learned behavior: reconnecting the same peer ID rotates `session_id` and replaces the stored peer address in-place.
+- Hardened `reth2030-types` serde boundary coverage with invalid fixed-length byte tests across tx/header/receipt/log decoding (`Address`/`Hash32` fields).
+- Learned pitfall: serde invalid-length error text varies between underflow and overflow cases; assert semantic failure (`invalid length`) instead of exact phrasing.
