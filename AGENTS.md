@@ -207,3 +207,6 @@ Reflection cadence:
 - Learned workflow: when an acceptance criterion is already checked but not explicitly guarded, add a focused seed contract that asserts both API wiring and edge-case test presence to prevent silent observability drift.
 - Added `scaffold_engine_seed_contract` tests to lock the checked Phase 2 task for scaffold execution (`TODO.md` checkmark + `SimpleExecutionEngine` wiring + runtime coverage for empty/no-op/custom intrinsic-gas paths).
 - Learned behavior: `SimpleExecutionEngine::new(0)` provides a no-op gas-accounting mode while still applying state transitions, so scaffold coverage should assert both zero-gas results and state mutation.
+- Added `reth2030_net_seed_contract` tests to lock the checked Phase 4 seed outcome (`TODO.md` checkmark + workspace member + crate manifest + peer/session abstraction wiring + edge-case unit-test coverage contract).
+- Learned behavior: `PeerManager::new(0)` must fail closed on first connect while still emitting rejected-peer observability signals (event/log/metrics).
+- Learned behavior: reconnecting the same peer ID rotates `session_id` and replaces the stored peer address in-place.

@@ -274,6 +274,55 @@ mod tests {
     }
 
     #[test]
+    fn reconnect_replaces_peer_address_and_rotates_session_id() {
+        let mut manager = PeerManager::new(2);
+        manager
+            .connect(PeerInfo::new(peer_id(9), "127.0.0.1:30303"))
+            .expect("initial connect must succeed");
+
+        let initial_session_id = manager
+            .session(&peer_id(9))
+            .expect("session should exist after initial connect")
+            .session_id;
+
+        manager
+            .connect(PeerInfo::new(peer_id(9), "127.0.0.1:30333"))
+            .expect("reconnect with updated address must succeed");
+
+        let updated_session = manager
+            .session(&peer_id(9))
+            .expect("session should exist after reconnect");
+        assert_eq!(updated_session.session_id, initial_session_id + 1);
+        assert_eq!(updated_session.peer.address, "127.0.0.1:30333");
+
+        let connected = manager.connected_peers();
+        assert_eq!(connected.len(), 1);
+        assert_eq!(connected[0].address, "127.0.0.1:30333");
+    }
+
+    #[test]
+    fn max_peers_zero_rejects_first_peer_and_keeps_state_empty() {
+        let mut manager = PeerManager::new(0);
+
+        let err = manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect_err("zero max peers should reject all new peers");
+
+        assert_eq!(err, PeerManagerError::MaxPeersReached { max_peers: 0 });
+        assert_eq!(manager.peer_count(), 0);
+        assert!(manager.session(&peer_id(1)).is_none());
+        assert_eq!(manager.events(), &[PeerEvent::RejectedMaxPeers(peer_id(1))]);
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[format!(
+                "peer.rejected_max_peers peer_id={} active_peers=0",
+                format_peer_id(&peer_id(1))
+            )]
+        );
+        assert_eq!(manager.metrics_snapshot(), (0, 0, 1, 0));
+    }
+
+    #[test]
     fn max_peers_limit_applies_only_to_new_peer_ids() {
         let mut manager = PeerManager::new(1);
 
