@@ -4,20 +4,24 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const TODO_SEED_TASK_LINE: &str = "- [x] Node can run a mocked sync loop without panic.";
-const REQUIRED_MAIN_SOURCE_SNIPPETS: [&str; 7] = [
-    "run_mock_sync: bool",
-    "fn run_mock_sync_once(&mut self) -> Result<(), NodeRuntimeError>",
+const TODO_SEED_TASK_LINE: &str = "- [x] Add startup/shutdown orchestration in `reth2030` binary.";
+const REQUIRED_MAIN_SOURCE_SNIPPETS: [&str; 9] = [
+    "enum RuntimeState",
+    "Initialized",
+    "Running",
+    "Stopped",
+    "fn start(&mut self) -> Result<(), NodeRuntimeError>",
+    "fn shutdown(&mut self) -> Result<(), NodeRuntimeError>",
     "fn execute(&mut self, run_mock_sync: bool) -> Result<(), NodeRuntimeError>",
-    "if run_mock_sync {",
-    "self.run_mock_sync_once()",
     "let shutdown_result = self.shutdown();",
     "runtime.execute(cli.run_mock_sync)",
 ];
-const REQUIRED_RUNTIME_TESTS: [&str; 3] = [
-    "mock_sync_loop_runs_without_error",
-    "mock_sync_loop_fails_closed_when_no_peer_slots_are_available",
-    "mock_sync_loop_can_run_repeatedly_without_panicking",
+const REQUIRED_RUNTIME_TESTS: [&str; 5] = [
+    "runtime_rejects_invalid_lifecycle_transitions",
+    "shutdown_disconnects_all_connected_peers",
+    "runtime_execute_without_mock_sync_starts_and_stops",
+    "runtime_execute_with_mock_sync_success_stops_and_disconnects",
+    "runtime_execute_with_mock_sync_failure_still_shuts_down",
 ];
 
 fn repo_root() -> PathBuf {
@@ -71,7 +75,7 @@ fn extract_test_function_names(source: &str) -> BTreeSet<String> {
 }
 
 #[test]
-fn extract_test_function_names_handles_additional_attributes() {
+fn extract_test_function_names_handles_attribute_gaps() {
     let source = r#"
 #[test]
 #[cfg(unix)]
@@ -89,46 +93,16 @@ fn simple_test() {}
 }
 
 #[test]
-fn extract_test_function_names_ignores_non_test_functions() {
-    let source = r#"
-fn helper() {}
-
-#[test]
-const SOMETHING: usize = 1;
-fn should_not_be_captured() {}
-
-#[test]
-fn captured() {}
-"#;
-
-    let names = extract_test_function_names(source);
-    assert_eq!(names, BTreeSet::from(["captured".to_owned()]));
-}
-
-#[test]
-fn todo_marks_mock_sync_seed_task_complete() {
+fn todo_marks_startup_shutdown_seed_task_complete() {
     let todo = read_repo_file("TODO.md");
     assert!(
         todo.lines().any(|line| line.trim() == TODO_SEED_TASK_LINE),
-        "TODO.md must keep the mocked sync seed task checked: {TODO_SEED_TASK_LINE}"
+        "TODO.md must keep the startup/shutdown seed task checked: {TODO_SEED_TASK_LINE}"
     );
 }
 
 #[test]
-fn workspace_keeps_required_mock_sync_crates() {
-    let workspace_manifest = read_repo_file("Cargo.toml");
-    assert!(
-        workspace_manifest.contains("\"crates/reth2030\""),
-        "workspace Cargo.toml must include `crates/reth2030` as a member"
-    );
-    assert!(
-        workspace_manifest.contains("\"crates/reth2030-net\""),
-        "workspace Cargo.toml must include `crates/reth2030-net` as a member"
-    );
-}
-
-#[test]
-fn main_keeps_mock_sync_cli_runtime_and_shutdown_wiring() {
+fn main_keeps_startup_shutdown_lifecycle_orchestration_wiring() {
     let main_source = read_repo_file("crates/reth2030/src/main.rs");
 
     for required_snippet in REQUIRED_MAIN_SOURCE_SNIPPETS {
@@ -140,7 +114,7 @@ fn main_keeps_mock_sync_cli_runtime_and_shutdown_wiring() {
 }
 
 #[test]
-fn main_keeps_runtime_mock_sync_test_coverage_contract() {
+fn main_keeps_startup_shutdown_runtime_test_coverage_contract() {
     let main_source = read_repo_file("crates/reth2030/src/main.rs");
     let discovered_tests = extract_test_function_names(&main_source);
 

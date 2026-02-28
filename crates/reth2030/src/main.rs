@@ -116,6 +116,20 @@ impl NodeRuntime {
         Ok(())
     }
 
+    fn execute(&mut self, run_mock_sync: bool) -> Result<(), NodeRuntimeError> {
+        self.start()?;
+
+        let run_result = if run_mock_sync {
+            self.run_mock_sync_once()
+        } else {
+            Ok(())
+        };
+
+        let shutdown_result = self.shutdown();
+        run_result?;
+        shutdown_result
+    }
+
     fn run_mock_sync_once(&mut self) -> Result<(), NodeRuntimeError> {
         if self.lifecycle != RuntimeState::Running {
             return Err(NodeRuntimeError::InvalidLifecycleState {
@@ -207,17 +221,7 @@ fn run(cli: Cli) -> Result<(), NodeRuntimeError> {
     config.max_peers = cli.maxpeers;
 
     let mut runtime = NodeRuntime::new(config);
-    runtime.start()?;
-
-    let run_result = if cli.run_mock_sync {
-        runtime.run_mock_sync_once()
-    } else {
-        Ok(())
-    };
-
-    let shutdown_result = runtime.shutdown();
-    run_result?;
-    shutdown_result
+    runtime.execute(cli.run_mock_sync)
 }
 
 #[cfg(test)]
@@ -467,5 +471,82 @@ mod tests {
             ]
         );
         assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 2, 0, 0));
+    }
+
+    #[test]
+    fn runtime_execute_without_mock_sync_starts_and_stops() {
+        let mut runtime = runtime_with_max_peers(1);
+
+        runtime
+            .execute(false)
+            .expect("runtime execute without mock sync should succeed");
+
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert!(
+            runtime.sync.peer_manager.events().is_empty(),
+            "no peer events should be emitted when mock sync is disabled"
+        );
+        assert!(
+            runtime.sync.peer_manager.lifecycle_logs().is_empty(),
+            "no peer lifecycle logs should be emitted when mock sync is disabled"
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn runtime_execute_with_mock_sync_success_stops_and_disconnects() {
+        let mut runtime = runtime_with_max_peers(1);
+
+        runtime
+            .execute(true)
+            .expect("runtime execute with mock sync should succeed");
+
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(1)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("disconnected", 1, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (1, 1, 0, 0));
+    }
+
+    #[test]
+    fn runtime_execute_with_mock_sync_failure_still_shuts_down() {
+        let mut runtime = runtime_with_max_peers(0);
+
+        let err = runtime
+            .execute(true)
+            .expect_err("runtime execute should return mock sync failure");
+
+        assert_eq!(
+            err,
+            NodeRuntimeError::PeerManager(PeerManagerError::MaxPeersReached { max_peers: 0 })
+        );
+        assert_eq!(
+            runtime.lifecycle,
+            RuntimeState::Stopped,
+            "execute must always attempt shutdown after start"
+        );
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[PeerEvent::RejectedMaxPeers(mock_peer_id(1))]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[expected_peer_log("rejected_max_peers", 1, 0)]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (0, 0, 1, 0));
     }
 }

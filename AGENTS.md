@@ -185,3 +185,5 @@ Reflection cadence:
 - Learned pitfall: mocked sync readiness can drift if `main.rs` test coverage is slimmed down; enforce presence of success, fail-closed, and repeated-run runtime tests via a seed contract.
 - Added `minimal_executable_block_flow_seed_contract` tests to lock the checked Phase 1 acceptance criterion (`TODO.md` checkmark + pre-execution empty-receipt representability + post-execution receipt/gas invariant boundaries).
 - Learned pitfall: checked acceptance criteria can drift without explicit contract coverage, even when lower-level unit tests still pass.
+- Added `startup_shutdown_seed_contract` tests to lock the checked Phase 4 startup/shutdown task (`TODO.md` checkmark + lifecycle state machine wiring + runtime test coverage contract).
+- Learned behavior: orchestration should still attempt `shutdown` after a mock-sync failure, leaving runtime state fail-closed at `Stopped`.
