@@ -48,6 +48,15 @@ fn as_str<'a>(value: &'a Value, context: &str) -> &'a str {
         .unwrap_or_else(|| panic!("{context} must be a string"))
 }
 
+fn optional_string_sequence(mapping: &Mapping, key: &str, context: &str) -> Option<Vec<String>> {
+    map_get(mapping, key).map(|value| {
+        as_sequence(value, context)
+            .iter()
+            .map(|entry| as_str(entry, context).to_owned())
+            .collect()
+    })
+}
+
 fn map_get<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a Value> {
     mapping
         .iter()
@@ -176,6 +185,13 @@ fn ci_workflow_still_runs_automatically_on_push_and_pull_request() {
         "push trigger must not use path filters that could skip automatic CI runs"
     );
     assert!(
+        map_get(push, "branches-ignore").is_none()
+            && map_get(push, "tags").is_none()
+            && map_get(push, "tags-ignore").is_none(),
+        "push trigger must avoid branch/tag ignore filters that can bypass automatic CI runs"
+    );
+
+    assert!(
         map_get(on, "pull_request").is_some(),
         "pull_request trigger must remain enabled for automatic CI runs"
     );
@@ -186,6 +202,26 @@ fn ci_workflow_still_runs_automatically_on_push_and_pull_request() {
                 && map_get(pull_request, "paths-ignore").is_none(),
             "pull_request trigger must not use path filters that could skip automatic CI runs"
         );
+        assert!(
+            map_get(pull_request, "branches-ignore").is_none(),
+            "pull_request trigger must not use branches-ignore filters"
+        );
+        if let Some(branches) =
+            optional_string_sequence(pull_request, "branches", "pull_request.branches")
+        {
+            assert!(
+                branches.iter().any(|branch| branch == "main"),
+                "pull_request.branches must include `main` when specified"
+            );
+        }
+        if let Some(types) = optional_string_sequence(pull_request, "types", "pull_request.types") {
+            assert!(
+                types.iter().any(|event_type| event_type == "opened")
+                    && types.iter().any(|event_type| event_type == "reopened")
+                    && types.iter().any(|event_type| event_type == "synchronize"),
+                "pull_request.types must include opened/reopened/synchronize to keep CI automatic"
+            );
+        }
     } else {
         assert!(
             pull_request.is_null(),
@@ -212,6 +248,13 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
         map_get(vector_job, "needs").is_none(),
         "vector-conformance job must not depend on other jobs that can suppress execution"
     );
+    if let Some(continue_on_error) = map_get(vector_job, "continue-on-error") {
+        assert_eq!(
+            continue_on_error.as_bool(),
+            Some(false),
+            "vector-conformance job must fail closed when vector execution fails"
+        );
+    }
 
     let steps = as_sequence(
         map_get_required(vector_job, "steps", "jobs.vector-conformance"),
@@ -243,6 +286,25 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
         "Vector conformance step must execute before artifact upload"
     );
 
+    for step in steps {
+        let step = as_mapping(step, "job step");
+        let is_upload_step =
+            map_get(step, "uses").and_then(Value::as_str) == Some("actions/upload-artifact@v4");
+        if !is_upload_step {
+            assert!(
+                map_get(step, "if").is_none(),
+                "vector-conformance steps must not be conditionally gated"
+            );
+        }
+        if let Some(continue_on_error) = map_get(step, "continue-on-error") {
+            assert_eq!(
+                continue_on_error.as_bool(),
+                Some(false),
+                "vector-conformance steps must fail closed on errors"
+            );
+        }
+    }
+
     let vector_command = as_str(
         map_get_required(vector_run, "run", "Vector conformance step"),
         "vector run command",
@@ -252,6 +314,12 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
         assert!(
             vector_command.contains(required_arg),
             "vector conformance command must include `{required_arg}`"
+        );
+    }
+    for disallowed_fragment in ["|| true", "||true", "set +e", "; true"] {
+        assert!(
+            !vector_command.contains(disallowed_fragment),
+            "vector conformance command must not mask failures with `{disallowed_fragment}`"
         );
     }
 }
