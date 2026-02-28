@@ -170,3 +170,5 @@ Reflection cadence:
 - Learned behavior: failed `transfer` calls are atomic (no sender/recipient mutation), while self-transfers preserve balance and only bump sender nonce.
 - Hardened `reth2030-rpc` JSON-RPC request validation: reject non-spec `id` types (bool/array/object) and scalar `params`, while still allowing omitted `params`.
 - Learned pitfall: modeling request `id`/`params` as unconstrained `serde_json::Value` silently accepts invalid JSON-RPC shapes unless explicitly validated.
+- Added repeated-run execution determinism tests in `reth2030-core` covering mixed tx variants (`Legacy`, `Eip1559`, `Blob`) with payload/blob fields.
+- Learned behavior: execution failures after partial state progress are deterministic across reruns from identical pre-state (stable `ExecutionError` and identical post-failure state snapshot).

@@ -2,14 +2,14 @@ use reth2030_core::{
     Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateError,
     StateStore,
 };
-use reth2030_types::{Block, Header, LegacyTx, Transaction};
+use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction};
 
 fn addr(byte: u8) -> [u8; 20] {
     [byte; 20]
 }
 
 fn mk_legacy(from: [u8; 20], to: [u8; 20], nonce: u64, value: u128) -> Transaction {
-    mk_legacy_with_gas(from, to, nonce, 21_000, value)
+    mk_legacy_with_payload(from, to, nonce, 21_000, value, Vec::new())
 }
 
 fn mk_legacy_with_gas(
@@ -19,6 +19,17 @@ fn mk_legacy_with_gas(
     gas_limit: u64,
     value: u128,
 ) -> Transaction {
+    mk_legacy_with_payload(from, to, nonce, gas_limit, value, Vec::new())
+}
+
+fn mk_legacy_with_payload(
+    from: [u8; 20],
+    to: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+    data: Vec<u8>,
+) -> Transaction {
     Transaction::Legacy(LegacyTx {
         nonce,
         from,
@@ -26,7 +37,50 @@ fn mk_legacy_with_gas(
         gas_limit,
         gas_price: 1,
         value,
-        data: Vec::new(),
+        data,
+    })
+}
+
+fn mk_eip1559(
+    from: [u8; 20],
+    to: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+    data: Vec<u8>,
+) -> Transaction {
+    Transaction::Eip1559(Eip1559Tx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit,
+        max_fee_per_gas: 100,
+        max_priority_fee_per_gas: 2,
+        value,
+        data,
+    })
+}
+
+fn mk_blob(
+    from: [u8; 20],
+    to: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+    data: Vec<u8>,
+    blob_versioned_hashes: Vec<[u8; 32]>,
+) -> Transaction {
+    Transaction::Blob(BlobTx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit,
+        max_fee_per_gas: 120,
+        max_priority_fee_per_gas: 3,
+        max_fee_per_blob_gas: 10,
+        value,
+        data,
+        blob_versioned_hashes,
     })
 }
 
@@ -80,6 +134,120 @@ fn block_execution_is_deterministic_for_identical_input() {
 
     assert_eq!(result_a, result_b);
     assert_eq!(state_a.snapshot(), state_b.snapshot());
+}
+
+#[test]
+fn repeated_execution_output_is_deterministic_for_mixed_transaction_variants() {
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_with_payload(
+                addr(0x01),
+                addr(0x02),
+                0,
+                30_000,
+                7,
+                vec![0xde, 0xad, 0xbe, 0xef],
+            ),
+            mk_eip1559(addr(0x01), addr(0x03), 1, 40_000, 5, vec![0xca, 0xfe]),
+            mk_blob(
+                addr(0x04),
+                addr(0x05),
+                0,
+                50_000,
+                9,
+                vec![1, 2, 3, 4],
+                vec![[0x11; 32], [0x22; 32]],
+            ),
+        ],
+        75_000,
+    );
+
+    let mut initial_state = InMemoryState::new();
+    initial_state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 20,
+            ..Account::default()
+        },
+    );
+    initial_state.upsert_account(
+        addr(0x04),
+        Account {
+            balance: 15,
+            ..Account::default()
+        },
+    );
+
+    let engine = SimpleExecutionEngine::default();
+    let mut baseline_state = initial_state.clone();
+    let baseline_result = engine
+        .execute_block(&mut baseline_state, &block)
+        .expect("baseline mixed-variant execution");
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..16 {
+        let mut run_state = initial_state.clone();
+        let run_result = engine
+            .execute_block(&mut run_state, &block)
+            .expect("repeated mixed-variant execution");
+        assert_eq!(
+            run_result, baseline_result,
+            "run {run} produced non-deterministic execution output"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic post-state snapshot"
+        );
+    }
+}
+
+#[test]
+fn repeated_execution_failure_is_deterministic_for_identical_input() {
+    let block = block_with_txs(vec![
+        mk_legacy(addr(0x01), addr(0x02), 0, 4),
+        mk_legacy(addr(0x01), addr(0x03), 1, 4),
+    ]);
+
+    let mut initial_state = InMemoryState::new();
+    initial_state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 6,
+            ..Account::default()
+        },
+    );
+
+    let engine = SimpleExecutionEngine::default();
+    let mut baseline_state = initial_state.clone();
+    let baseline_err = engine
+        .execute_block(&mut baseline_state, &block)
+        .expect_err("baseline execution should fail on second tx");
+    assert_eq!(
+        baseline_err,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0x01),
+            available: 2,
+            requested: 4,
+        })
+    );
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..16 {
+        let mut run_state = initial_state.clone();
+        let run_err = engine
+            .execute_block(&mut run_state, &block)
+            .expect_err("repeated execution should fail the same way");
+        assert_eq!(
+            run_err, baseline_err,
+            "run {run} produced non-deterministic execution error"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic partial post-state"
+        );
+    }
 }
 
 #[test]
