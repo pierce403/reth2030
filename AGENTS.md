@@ -212,3 +212,5 @@ Reflection cadence:
 - Learned behavior: reconnecting the same peer ID rotates `session_id` and replaces the stored peer address in-place.
 - Hardened `reth2030-types` serde boundary coverage with invalid fixed-length byte tests across tx/header/receipt/log decoding (`Address`/`Hash32` fields).
 - Learned pitfall: serde invalid-length error text varies between underflow and overflow cases; assert semantic failure (`invalid length`) instead of exact phrasing.
+- Hardened `minimal_executable_block_flow_seed_contract` with contract-creation coverage (`to: None`) across `Legacy`, `Eip1559`, and `Blob` transaction variants.
+- Learned behavior: block-flow validation intentionally allows equal adjacent `receipt.cumulative_gas_used` values (non-decreasing, not strictly increasing), so seed tests should lock this with a plateau-gas case.
