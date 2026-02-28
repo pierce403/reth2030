@@ -168,3 +168,5 @@ Reflection cadence:
 - Learned pitfall: order-only docs checks can miss ambiguous/duplicate command snippets; enforce unique prefix matches for contributor-facing check commands.
 - Added exhaustive `InMemoryState` transition tests for storage write semantics: writes lazily create default accounts and key overwrites remain account-scoped.
 - Learned behavior: failed `transfer` calls are atomic (no sender/recipient mutation), while self-transfers preserve balance and only bump sender nonce.
+- Hardened `reth2030-rpc` JSON-RPC request validation: reject non-spec `id` types (bool/array/object) and scalar `params`, while still allowing omitted `params`.
+- Learned pitfall: modeling request `id`/`params` as unconstrained `serde_json::Value` silently accepts invalid JSON-RPC shapes unless explicitly validated.

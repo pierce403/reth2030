@@ -129,7 +129,31 @@ fn decode_request(body: &str) -> Result<JsonRpcRequest, Box<JsonRpcResponse>> {
         )));
     }
 
+    if !is_valid_request_id(&request.id) {
+        return Err(Box::new(error_response(
+            Value::Null,
+            -32600,
+            "Invalid request: id must be string, number, or null",
+        )));
+    }
+
+    if !is_valid_request_params(&request.params) {
+        return Err(Box::new(error_response(
+            request.id,
+            -32600,
+            "Invalid request: params must be array or object",
+        )));
+    }
+
     Ok(request)
+}
+
+fn is_valid_request_id(id: &Value) -> bool {
+    matches!(id, Value::Null | Value::Number(_) | Value::String(_))
+}
+
+fn is_valid_request_params(params: &Value) -> bool {
+    params.is_null() || params.is_array() || params.is_object()
 }
 
 fn dispatch_public_method(state: &RpcServerState, request: JsonRpcRequest) -> JsonRpcResponse {
@@ -393,6 +417,102 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn request_validation_accepts_string_number_and_null_ids() {
+        for request_id in [json!("abc"), json!(1), Value::Null] {
+            let response = call_json_rpc(
+                RpcServerState::default(),
+                "/",
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "web3_clientVersion",
+                    "params": []
+                })
+                .to_string(),
+                &[],
+            )
+            .await;
+
+            assert!(response.error.is_none());
+            assert_eq!(
+                response.result.expect("result"),
+                Value::from("reth2030/v0.1.0")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn request_validation_rejects_invalid_id_types() {
+        for invalid_id in [json!(true), json!([1]), json!({ "nested": 1 })] {
+            let response = call_json_rpc(
+                RpcServerState::default(),
+                "/",
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": invalid_id,
+                    "method": "web3_clientVersion",
+                    "params": []
+                })
+                .to_string(),
+                &[],
+            )
+            .await;
+
+            let error = response.error.expect("error");
+            assert_eq!(error.code, -32600);
+            assert_eq!(
+                error.message,
+                "Invalid request: id must be string, number, or null"
+            );
+            assert_eq!(response.id, Value::Null);
+        }
+    }
+
+    #[tokio::test]
+    async fn request_validation_rejects_scalar_params() {
+        let response = call_json_rpc(
+            RpcServerState::default(),
+            "/",
+            json!({
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "eth_blockNumber",
+                "params": true
+            })
+            .to_string(),
+            &[],
+        )
+        .await;
+
+        let error = response.error.expect("error");
+        assert_eq!(error.code, -32600);
+        assert_eq!(
+            error.message,
+            "Invalid request: params must be array or object"
+        );
+        assert_eq!(response.id, Value::from(5));
+    }
+
+    #[tokio::test]
+    async fn request_validation_allows_missing_params_field() {
+        let response = call_json_rpc(
+            RpcServerState::default(),
+            "/",
+            json!({
+                "jsonrpc": "2.0",
+                "id": 9,
+                "method": "eth_chainId"
+            })
+            .to_string(),
+            &[],
+        )
+        .await;
+
+        assert!(response.error.is_none());
+        assert_eq!(response.result.expect("result"), Value::from("0x1"));
+    }
+
+    #[tokio::test]
     async fn engine_api_requires_authorization_header() {
         let unauthorized = call_json_rpc(
             RpcServerState::default(),
@@ -570,6 +690,56 @@ mod tests {
         let parse_error_body = parse_error.error.expect("error");
         assert_eq!(parse_error_body.code, -32700);
         assert_eq!(parse_error_body.message, "Parse error");
+    }
+
+    #[tokio::test]
+    async fn authorized_engine_requests_reject_invalid_id_types() {
+        let response = call_json_rpc(
+            RpcServerState::default(),
+            "/engine",
+            json!({
+                "jsonrpc": "2.0",
+                "id": false,
+                "method": "engine_exchangeCapabilities",
+                "params": []
+            })
+            .to_string(),
+            &["Bearer dev-jwt"],
+        )
+        .await;
+
+        let error = response.error.expect("error");
+        assert_eq!(error.code, -32600);
+        assert_eq!(
+            error.message,
+            "Invalid request: id must be string, number, or null"
+        );
+        assert_eq!(response.id, Value::Null);
+    }
+
+    #[tokio::test]
+    async fn authorized_engine_requests_reject_scalar_params() {
+        let response = call_json_rpc(
+            RpcServerState::default(),
+            "/engine",
+            json!({
+                "jsonrpc": "2.0",
+                "id": 17,
+                "method": "engine_exchangeCapabilities",
+                "params": 0
+            })
+            .to_string(),
+            &["Bearer dev-jwt"],
+        )
+        .await;
+
+        let error = response.error.expect("error");
+        assert_eq!(error.code, -32600);
+        assert_eq!(
+            error.message,
+            "Invalid request: params must be array or object"
+        );
+        assert_eq!(response.id, Value::from(17));
     }
 
     #[tokio::test]
