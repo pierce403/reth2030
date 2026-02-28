@@ -158,6 +158,39 @@ mod tests {
     }
 
     #[test]
+    fn set_storage_creates_account_with_default_fields() {
+        let mut state = InMemoryState::new();
+        let key = [0x11; 32];
+        let value = [0x22; 32];
+
+        state.set_storage(addr(0x01), key, value);
+
+        let account = state
+            .get_account(&addr(0x01))
+            .expect("storage write creates account");
+        assert_eq!(account.nonce, 0);
+        assert_eq!(account.balance, 0);
+        assert!(account.code.is_empty());
+        assert_eq!(account.storage.get(&key), Some(&value));
+    }
+
+    #[test]
+    fn set_storage_overwrites_per_account_without_leakage() {
+        let mut state = InMemoryState::new();
+        let key = [0x11; 32];
+        let first = [0x22; 32];
+        let second = [0x33; 32];
+        let other = [0x44; 32];
+
+        state.set_storage(addr(0x01), key, first);
+        state.set_storage(addr(0x02), key, other);
+        state.set_storage(addr(0x01), key, second);
+
+        assert_eq!(state.get_storage(&addr(0x01), &key), Some(second));
+        assert_eq!(state.get_storage(&addr(0x02), &key), Some(other));
+    }
+
+    #[test]
     fn transfer_updates_balances_and_nonce() {
         let mut state = InMemoryState::new();
         state.upsert_account(
@@ -201,6 +234,84 @@ mod tests {
                 requested: 6,
             }
         );
+    }
+
+    #[test]
+    fn transfer_error_is_atomic_for_sender_and_recipient() {
+        let mut state = InMemoryState::new();
+        state.upsert_account(
+            addr(0xaa),
+            Account {
+                nonce: 7,
+                balance: 5,
+                ..Account::default()
+            },
+        );
+        let before = state.snapshot();
+
+        let err = state
+            .transfer(addr(0xaa), addr(0xbb), 6)
+            .expect_err("must fail");
+        assert_eq!(
+            err,
+            StateError::InsufficientBalance {
+                address: addr(0xaa),
+                available: 5,
+                requested: 6,
+            }
+        );
+        assert_eq!(state.snapshot(), before);
+        assert_eq!(state.get_account(&addr(0xbb)), None);
+    }
+
+    #[test]
+    fn transfer_saturates_recipient_balance() {
+        let mut state = InMemoryState::new();
+        state.upsert_account(
+            addr(0xaa),
+            Account {
+                balance: 10,
+                ..Account::default()
+            },
+        );
+        state.upsert_account(
+            addr(0xbb),
+            Account {
+                balance: u128::MAX - 2,
+                ..Account::default()
+            },
+        );
+
+        state
+            .transfer(addr(0xaa), addr(0xbb), 5)
+            .expect("transfer succeeds");
+
+        let sender = state.get_account(&addr(0xaa)).expect("sender account");
+        let recipient = state.get_account(&addr(0xbb)).expect("recipient account");
+        assert_eq!(sender.balance, 5);
+        assert_eq!(sender.nonce, 1);
+        assert_eq!(recipient.balance, u128::MAX);
+        assert_eq!(recipient.nonce, 0);
+    }
+
+    #[test]
+    fn transfer_to_self_preserves_balance_and_bumps_nonce() {
+        let mut state = InMemoryState::new();
+        state.upsert_account(
+            addr(0xaa),
+            Account {
+                balance: 42,
+                ..Account::default()
+            },
+        );
+
+        state
+            .transfer(addr(0xaa), addr(0xaa), 7)
+            .expect("self transfer");
+
+        let account = state.get_account(&addr(0xaa)).expect("account exists");
+        assert_eq!(account.balance, 42);
+        assert_eq!(account.nonce, 1);
     }
 
     #[test]

@@ -166,3 +166,5 @@ Reflection cadence:
 - Added sync integration assertions that malformed header batches trigger fail-closed rejection before any body fetch and that execution failure stops further body fetches immediately.
 - Hardened contributor command contracts to require a single core-check-prefix fenced block in `README.md` and `AGENTS.md`, reducing onboarding ambiguity.
 - Learned pitfall: order-only docs checks can miss ambiguous/duplicate command snippets; enforce unique prefix matches for contributor-facing check commands.
+- Added exhaustive `InMemoryState` transition tests for storage write semantics: writes lazily create default accounts and key overwrites remain account-scoped.
+- Learned behavior: failed `transfer` calls are atomic (no sender/recipient mutation), while self-transfers preserve balance and only bump sender nonce.
