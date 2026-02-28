@@ -152,3 +152,5 @@ Reflection cadence:
 - Learned pitfall: receipt-bearing block fixtures can silently drift from header gas accounting unless receipt cumulative gas invariants are validated explicitly.
 - Added `vectors/baseline/conformance-history.json` as an append-only conformance metric timeline tied to `vectors/baseline/scorecard.json`.
 - Added `conformance_history_contract` tests to enforce valid date ordering, score math invariants, and latest-entry parity with the checked-in scorecard.
+- Hardened `reth2030` runtime lifecycle with explicit `Initialized/Running/Stopped` transitions and fail-closed start/run/shutdown guards.
+- Learned behavior: shutdown should disconnect all connected peers deterministically, and `main` should attempt shutdown even when mock sync fails.
