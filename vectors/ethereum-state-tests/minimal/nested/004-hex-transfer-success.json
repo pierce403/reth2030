@@ -1,0 +1,30 @@
+{
+  "name": "hex-transfer-success",
+  "initial_accounts": [
+    {
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "balance": "0x64"
+    }
+  ],
+  "transactions": [
+    {
+      "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "nonce": 0,
+      "value": "0x19"
+    }
+  ],
+  "expected": {
+    "success": true,
+    "balances": [
+      {
+        "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "balance": "0x4b"
+      },
+      {
+        "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "balance": "0x19"
+      }
+    ]
+  }
+}

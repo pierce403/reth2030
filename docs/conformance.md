@@ -28,6 +28,11 @@ The scorecard tracks:
 - failed fixtures
 - pass rate (`0.0..1.0`)
 
+Fixture discovery and parsing rules:
+- JSON fixtures are discovered recursively under the configured fixtures directory.
+- Numeric fields (`balance`, `value`) accept decimal strings or `0x`-prefixed hex strings.
+- Fixture schema is strict (`deny_unknown_fields`) to catch accidental drift early.
+
 ## Triage Workflow
 
 1. If CI fails with a scorecard or snapshot regression, inspect the diff summary in logs.

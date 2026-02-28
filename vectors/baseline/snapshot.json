@@ -2,6 +2,23 @@
   "suite": "minimal-state-tests",
   "fixtures": [
     {
+      "name": "hex-transfer-success",
+      "passed": true,
+      "expected_success": true,
+      "actual_success": true,
+      "mismatches": [],
+      "actual_balances": [
+        {
+          "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "balance": "75"
+        },
+        {
+          "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "balance": "25"
+        }
+      ]
+    },
+    {
       "name": "insufficient-balance",
       "passed": true,
       "expected_success": false,

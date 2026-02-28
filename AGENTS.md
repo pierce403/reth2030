@@ -111,3 +111,7 @@ Reflection cadence:
 - Added `ralph.sh` automation loop for random TODO-driven Codex execution.
 - Added `ralph.log` ignore rule to keep loop logs out of git history.
 - Standardized project licensing to Apache-2.0 (root LICENSE + crate manifests).
+- Hardened `reth2030-vectors` fixture loading to recurse subdirectories deterministically.
+- Learned pitfall: duplicate fixture `name` values across files caused ambiguous reporting; now rejected at load time.
+- Hardened fixture schema parsing with `deny_unknown_fields` to surface format drift early.
+- Added decimal + `0x` hex numeric parsing for vector balances/values to better match Ethereum-style fixtures.

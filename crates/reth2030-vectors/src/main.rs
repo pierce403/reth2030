@@ -3,6 +3,7 @@ use reth2030_core::{Account, InMemoryState, StateStore};
 use reth2030_types::{LegacyTx, Transaction};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -28,6 +29,7 @@ struct Args {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Fixture {
     name: String,
     initial_accounts: Vec<FixtureBalance>,
@@ -36,12 +38,14 @@ struct Fixture {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FixtureBalance {
     address: String,
     balance: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FixtureTx {
     from: String,
     to: Option<String>,
@@ -50,6 +54,7 @@ struct FixtureTx {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FixtureExpected {
     success: bool,
     balances: Vec<FixtureBalance>,
@@ -170,28 +175,65 @@ fn run() -> Result<(), String> {
 }
 
 fn load_fixtures(fixtures_dir: &Path) -> Result<Vec<Fixture>, String> {
-    let mut paths = Vec::new();
-    let entries = fs::read_dir(fixtures_dir).map_err(|err| err.to_string())?;
-
-    for entry in entries {
-        let entry = entry.map_err(|err| err.to_string())?;
-        let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) == Some("json") {
-            paths.push(path);
-        }
-    }
-
-    paths.sort();
+    let paths = collect_fixture_paths(fixtures_dir)?;
 
     let mut fixtures = Vec::with_capacity(paths.len());
+    let mut seen_names = BTreeMap::new();
     for path in paths {
         let contents = fs::read_to_string(&path).map_err(|err| err.to_string())?;
         let fixture: Fixture = serde_json::from_str(&contents)
             .map_err(|err| format!("failed to decode {}: {}", path.display(), err))?;
+
+        if let Some(previous_path) = seen_names.insert(fixture.name.clone(), path.clone()) {
+            return Err(format!(
+                "duplicate fixture name '{}' in {} and {}",
+                fixture.name,
+                previous_path.display(),
+                path.display()
+            ));
+        }
+
         fixtures.push(fixture);
     }
 
     Ok(fixtures)
+}
+
+fn collect_fixture_paths(fixtures_dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut paths = Vec::new();
+    collect_fixture_paths_recursive(fixtures_dir, &mut paths)?;
+    Ok(paths)
+}
+
+fn collect_fixture_paths_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|err| {
+        format!(
+            "failed to read fixtures directory {}: {}",
+            dir.display(),
+            err
+        )
+    })?;
+    let mut paths = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|err| err.to_string())?;
+        paths.push(entry.path());
+    }
+
+    paths.sort();
+
+    for path in paths {
+        if path.is_dir() {
+            collect_fixture_paths_recursive(&path, out)?;
+            continue;
+        }
+
+        if path.extension().and_then(|value| value.to_str()) == Some("json") {
+            out.push(path);
+        }
+    }
+
+    Ok(())
 }
 
 fn execute_fixture(fixture: &Fixture) -> Result<FixtureRun, String> {
@@ -236,28 +278,62 @@ fn execute_fixture(fixture: &Fixture) -> Result<FixtureRun, String> {
         ));
     }
 
-    let mut actual_balances = Vec::with_capacity(fixture.expected.balances.len());
+    let mut expected_balances = BTreeMap::new();
     for expected_balance in &fixture.expected.balances {
         let address = parse_address(&expected_balance.address)?;
         let expected_value = parse_u128(&expected_balance.balance)?;
-        let actual_value = state
-            .get_account(&address)
-            .map(|account| account.balance)
-            .unwrap_or(0);
 
-        if actual_value != expected_value {
-            mismatches.push(format!(
-                "balance mismatch for {}: expected={}, actual={}",
-                expected_balance.address, expected_value, actual_value
+        if expected_balances.insert(address, expected_value).is_some() {
+            return Err(format!(
+                "fixture '{}' has duplicate expected balance entry for {}",
+                fixture.name, expected_balance.address
             ));
         }
-
-        actual_balances.push(BalanceSnapshot {
-            address: expected_balance.address.clone(),
-            balance: actual_value.to_string(),
-        });
     }
 
+    let snapshot = state.snapshot();
+
+    for (address, expected_value) in &expected_balances {
+        let actual_value = snapshot
+            .get(address)
+            .map(|account| account.balance)
+            .unwrap_or(0);
+        if actual_value != *expected_value {
+            mismatches.push(format!(
+                "balance mismatch for {}: expected={}, actual={}",
+                format_address(address),
+                expected_value,
+                actual_value
+            ));
+        }
+    }
+
+    for (address, account) in &snapshot {
+        if !expected_balances.contains_key(address) {
+            mismatches.push(format!(
+                "unexpected account in post-state {} with balance={}",
+                format_address(address),
+                account.balance
+            ));
+        }
+    }
+
+    let address_union: BTreeSet<[u8; 20]> = snapshot
+        .keys()
+        .copied()
+        .chain(expected_balances.keys().copied())
+        .collect();
+    let mut actual_balances = Vec::with_capacity(address_union.len());
+    for address in address_union {
+        let balance = snapshot
+            .get(&address)
+            .map(|account| account.balance)
+            .unwrap_or(0);
+        actual_balances.push(BalanceSnapshot {
+            address: format_address(&address),
+            balance: balance.to_string(),
+        });
+    }
     actual_balances.sort_by(|a, b| a.address.cmp(&b.address));
 
     Ok(FixtureRun {
@@ -271,9 +347,25 @@ fn execute_fixture(fixture: &Fixture) -> Result<FixtureRun, String> {
 }
 
 fn parse_u128(value: &str) -> Result<u128, String> {
-    value
-        .parse::<u128>()
-        .map_err(|_| format!("invalid numeric value: {}", value))
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("invalid numeric value: {}", value));
+    }
+
+    let (radix, digits) = if let Some(hex_digits) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        (16, hex_digits)
+    } else {
+        (10, trimmed)
+    };
+
+    if digits.is_empty() {
+        return Err(format!("invalid numeric value: {}", value));
+    }
+
+    u128::from_str_radix(digits, radix).map_err(|_| format!("invalid numeric value: {}", value))
 }
 
 fn parse_address(input: &str) -> Result<[u8; 20], String> {
@@ -292,6 +384,17 @@ fn parse_address(input: &str) -> Result<[u8; 20], String> {
     }
 
     Ok(out)
+}
+
+fn format_address(address: &[u8; 20]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut formatted = String::with_capacity(42);
+    formatted.push_str("0x");
+    for byte in address {
+        formatted.push(HEX[(byte >> 4) as usize] as char);
+        formatted.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    formatted
 }
 
 fn compare_with_baseline(label: &str, baseline_path: &Path, generated: &str) -> Result<(), String> {
@@ -348,13 +451,140 @@ fn diff_summary(expected: &str, actual: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        execute_fixture, parse_address, Fixture, FixtureBalance, FixtureExpected, FixtureTx,
+        execute_fixture, load_fixtures, parse_address, parse_u128, Fixture, FixtureBalance,
+        FixtureExpected, FixtureTx,
     };
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(prefix: &str) -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "reth2030-vectors-{prefix}-{}-{unique}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&path).expect("create temp dir");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dir");
+        }
+        fs::write(path, contents).expect("write file");
+    }
+
+    fn minimal_fixture_json(name: &str) -> String {
+        format!(
+            r#"{{
+  "name": "{name}",
+  "initial_accounts": [
+    {{
+      "address": "0x1111111111111111111111111111111111111111",
+      "balance": "10"
+    }}
+  ],
+  "transactions": [],
+  "expected": {{
+    "success": true,
+    "balances": [
+      {{
+        "address": "0x1111111111111111111111111111111111111111",
+        "balance": "10"
+      }}
+    ]
+  }}
+}}"#
+        )
+    }
 
     #[test]
     fn parse_address_accepts_20_byte_hex() {
         let address = parse_address("0x1111111111111111111111111111111111111111").expect("parse");
         assert_eq!(address, [0x11; 20]);
+    }
+
+    #[test]
+    fn parse_u128_accepts_decimal_and_hex() {
+        assert_eq!(parse_u128("42").expect("decimal"), 42);
+        assert_eq!(parse_u128("0x2a").expect("hex"), 42);
+        assert_eq!(parse_u128("0X2A").expect("uppercase hex"), 42);
+    }
+
+    #[test]
+    fn parse_u128_rejects_invalid_values() {
+        assert!(parse_u128("0x").is_err());
+        assert!(parse_u128("not-a-number").is_err());
+    }
+
+    #[test]
+    fn load_fixtures_recurses_into_nested_directories() {
+        let temp_dir = TempDir::new("nested-fixtures");
+        let nested_fixture_path = temp_dir.path.join("nested/fixtures/001.json");
+        write_file(
+            &nested_fixture_path,
+            &minimal_fixture_json("nested-fixture"),
+        );
+
+        let fixtures = load_fixtures(&temp_dir.path).expect("load fixtures");
+        assert_eq!(fixtures.len(), 1);
+        assert_eq!(fixtures[0].name, "nested-fixture");
+    }
+
+    #[test]
+    fn load_fixtures_rejects_duplicate_fixture_names() {
+        let temp_dir = TempDir::new("duplicate-names");
+        write_file(
+            &temp_dir.path.join("a/001.json"),
+            &minimal_fixture_json("duplicate-name"),
+        );
+        write_file(
+            &temp_dir.path.join("b/001.json"),
+            &minimal_fixture_json("duplicate-name"),
+        );
+
+        let err = load_fixtures(&temp_dir.path).expect_err("must reject duplicate names");
+        assert!(err.contains("duplicate fixture name 'duplicate-name'"));
+    }
+
+    #[test]
+    fn load_fixtures_rejects_unknown_fields() {
+        let temp_dir = TempDir::new("unknown-fields");
+        write_file(
+            &temp_dir.path.join("001.json"),
+            r#"{
+  "name": "bad-fixture",
+  "unexpected": true,
+  "initial_accounts": [],
+  "transactions": [],
+  "expected": {
+    "success": true,
+    "balances": []
+  }
+}"#,
+        );
+
+        let err = load_fixtures(&temp_dir.path).expect_err("must reject unknown fields");
+        assert!(err.contains("unknown field"));
+        assert!(err.contains("unexpected"));
     }
 
     #[test]
@@ -389,5 +619,98 @@ mod tests {
         let result = execute_fixture(&fixture).expect("fixture execution");
         assert!(result.passed);
         assert!(!result.actual_success);
+    }
+
+    #[test]
+    fn execute_fixture_accepts_hex_numeric_fields() {
+        let fixture = Fixture {
+            name: "hex-transfer-success".to_string(),
+            initial_accounts: vec![FixtureBalance {
+                address: "0x1111111111111111111111111111111111111111".to_string(),
+                balance: "0x1e".to_string(),
+            }],
+            transactions: vec![FixtureTx {
+                from: "0x1111111111111111111111111111111111111111".to_string(),
+                to: Some("0x2222222222222222222222222222222222222222".to_string()),
+                nonce: 0,
+                value: "0xa".to_string(),
+            }],
+            expected: FixtureExpected {
+                success: true,
+                balances: vec![
+                    FixtureBalance {
+                        address: "0x1111111111111111111111111111111111111111".to_string(),
+                        balance: "0x14".to_string(),
+                    },
+                    FixtureBalance {
+                        address: "0x2222222222222222222222222222222222222222".to_string(),
+                        balance: "0xa".to_string(),
+                    },
+                ],
+            },
+        };
+
+        let result = execute_fixture(&fixture).expect("fixture execution");
+        assert!(result.passed);
+        assert!(result.actual_success);
+    }
+
+    #[test]
+    fn execute_fixture_flags_unexpected_post_state_accounts() {
+        let fixture = Fixture {
+            name: "missing-expected-recipient".to_string(),
+            initial_accounts: vec![FixtureBalance {
+                address: "0x1111111111111111111111111111111111111111".to_string(),
+                balance: "10".to_string(),
+            }],
+            transactions: vec![FixtureTx {
+                from: "0x1111111111111111111111111111111111111111".to_string(),
+                to: Some("0x2222222222222222222222222222222222222222".to_string()),
+                nonce: 0,
+                value: "3".to_string(),
+            }],
+            expected: FixtureExpected {
+                success: true,
+                balances: vec![FixtureBalance {
+                    address: "0x1111111111111111111111111111111111111111".to_string(),
+                    balance: "7".to_string(),
+                }],
+            },
+        };
+
+        let result = execute_fixture(&fixture).expect("fixture execution");
+        assert!(!result.passed);
+        assert!(result
+            .mismatches
+            .iter()
+            .any(|entry| entry.contains("unexpected account in post-state")));
+    }
+
+    #[test]
+    fn execute_fixture_rejects_duplicate_expected_balances() {
+        let fixture = Fixture {
+            name: "duplicate-balance-expectation".to_string(),
+            initial_accounts: vec![FixtureBalance {
+                address: "0x1111111111111111111111111111111111111111".to_string(),
+                balance: "10".to_string(),
+            }],
+            transactions: Vec::new(),
+            expected: FixtureExpected {
+                success: true,
+                balances: vec![
+                    FixtureBalance {
+                        address: "0x1111111111111111111111111111111111111111".to_string(),
+                        balance: "10".to_string(),
+                    },
+                    FixtureBalance {
+                        address: "0x1111111111111111111111111111111111111111".to_string(),
+                        balance: "10".to_string(),
+                    },
+                ],
+            },
+        };
+
+        let err = execute_fixture(&fixture).expect_err("duplicate expected balances must fail");
+        assert!(err.contains("duplicate expected balance entry"));
     }
 }
