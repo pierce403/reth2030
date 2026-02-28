@@ -105,10 +105,40 @@ fn as_bool(value: &Value, context: &str) -> bool {
         .unwrap_or_else(|| panic!("{context} must be a JSON bool"))
 }
 
+fn parse_u128(value: &str, context: &str) -> u128 {
+    let trimmed = value.trim();
+    assert!(
+        !trimmed.is_empty(),
+        "{context} must not be an empty numeric string"
+    );
+
+    if let Some(hex_digits) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        assert!(
+            !hex_digits.is_empty(),
+            "{context} has invalid hex numeric string: {value}"
+        );
+        return u128::from_str_radix(hex_digits, 16).unwrap_or_else(|err| {
+            panic!("{context} has invalid hex numeric string `{value}`: {err}")
+        });
+    }
+
+    trimmed.parse::<u128>().unwrap_or_else(|err| {
+        panic!("{context} has invalid decimal numeric string `{value}`: {err}")
+    })
+}
+
 fn pointer_required<'a>(value: &'a Value, pointer: &str, context: &str) -> &'a Value {
     value.pointer(pointer).unwrap_or_else(|| {
         panic!("missing pointer `{pointer}` in {context}");
     })
+}
+
+fn u128_at(value: &Value, pointer: &str, context: &str) -> u128 {
+    let raw = as_str(pointer_required(value, pointer, context), context);
+    parse_u128(raw, &format!("{context}:{pointer}"))
 }
 
 fn normalize_repo_relative(path: &Path) -> String {
@@ -311,4 +341,186 @@ fn hex_fixture_keeps_hex_encoded_numeric_coverage() {
         }),
         "hex fixture expected balances must remain hex-encoded"
     );
+}
+
+#[test]
+fn minimal_subset_keeps_mixed_decimal_and_hex_numeric_encodings() {
+    for fixture_path in [
+        "vectors/ethereum-state-tests/minimal/001-transfer-success.json",
+        "vectors/ethereum-state-tests/minimal/002-insufficient-balance.json",
+        "vectors/ethereum-state-tests/minimal/003-ordering-sensitive-failure.json",
+    ] {
+        let fixture = fixture_document(fixture_path);
+
+        let initial_accounts = as_array(
+            pointer_required(&fixture, "/initial_accounts", fixture_path),
+            fixture_path,
+        );
+        assert!(
+            initial_accounts.iter().all(|account| {
+                !as_str(
+                    pointer_required(account, "/balance", fixture_path),
+                    fixture_path,
+                )
+                .starts_with("0x")
+            }),
+            "decimal fixtures must preserve decimal account balances: {fixture_path}"
+        );
+
+        let transactions = as_array(
+            pointer_required(&fixture, "/transactions", fixture_path),
+            fixture_path,
+        );
+        assert!(
+            transactions.iter().all(|tx| {
+                !as_str(pointer_required(tx, "/value", fixture_path), fixture_path)
+                    .starts_with("0x")
+            }),
+            "decimal fixtures must preserve decimal tx values: {fixture_path}"
+        );
+
+        let expected_balances = as_array(
+            pointer_required(&fixture, "/expected/balances", fixture_path),
+            fixture_path,
+        );
+        assert!(
+            expected_balances.iter().all(|entry| {
+                !as_str(
+                    pointer_required(entry, "/balance", fixture_path),
+                    fixture_path,
+                )
+                .starts_with("0x")
+            }),
+            "decimal fixtures must preserve decimal expected balances: {fixture_path}"
+        );
+    }
+}
+
+#[test]
+fn minimal_subset_preserves_transfer_arithmetic_and_partial_progress_invariants() {
+    let transfer_fixture_path = "vectors/ethereum-state-tests/minimal/001-transfer-success.json";
+    let transfer_fixture = fixture_document(transfer_fixture_path);
+    let transfer_initial = u128_at(
+        &transfer_fixture,
+        "/initial_accounts/0/balance",
+        transfer_fixture_path,
+    );
+    let transfer_tx_value = u128_at(
+        &transfer_fixture,
+        "/transactions/0/value",
+        transfer_fixture_path,
+    );
+    let transfer_sender_expected = u128_at(
+        &transfer_fixture,
+        "/expected/balances/0/balance",
+        transfer_fixture_path,
+    );
+    let transfer_recipient_expected = u128_at(
+        &transfer_fixture,
+        "/expected/balances/1/balance",
+        transfer_fixture_path,
+    );
+    assert_eq!(transfer_initial, 30);
+    assert_eq!(transfer_tx_value, 10);
+    assert_eq!(
+        transfer_sender_expected,
+        transfer_initial - transfer_tx_value
+    );
+    assert_eq!(transfer_recipient_expected, transfer_tx_value);
+
+    let insufficient_fixture_path =
+        "vectors/ethereum-state-tests/minimal/002-insufficient-balance.json";
+    let insufficient_fixture = fixture_document(insufficient_fixture_path);
+    let insufficient_initial = u128_at(
+        &insufficient_fixture,
+        "/initial_accounts/0/balance",
+        insufficient_fixture_path,
+    );
+    let insufficient_tx_value = u128_at(
+        &insufficient_fixture,
+        "/transactions/0/value",
+        insufficient_fixture_path,
+    );
+    let insufficient_sender_expected = u128_at(
+        &insufficient_fixture,
+        "/expected/balances/0/balance",
+        insufficient_fixture_path,
+    );
+    let insufficient_recipient_expected = u128_at(
+        &insufficient_fixture,
+        "/expected/balances/1/balance",
+        insufficient_fixture_path,
+    );
+    assert_eq!(insufficient_initial, 5);
+    assert_eq!(insufficient_tx_value, 6);
+    assert!(insufficient_tx_value > insufficient_initial);
+    assert_eq!(insufficient_sender_expected, insufficient_initial);
+    assert_eq!(insufficient_recipient_expected, 0);
+
+    let ordering_fixture_path =
+        "vectors/ethereum-state-tests/minimal/003-ordering-sensitive-failure.json";
+    let ordering_fixture = fixture_document(ordering_fixture_path);
+    let ordering_initial = u128_at(
+        &ordering_fixture,
+        "/initial_accounts/0/balance",
+        ordering_fixture_path,
+    );
+    let first_tx_value = u128_at(
+        &ordering_fixture,
+        "/transactions/0/value",
+        ordering_fixture_path,
+    );
+    let second_tx_value = u128_at(
+        &ordering_fixture,
+        "/transactions/1/value",
+        ordering_fixture_path,
+    );
+    let ordering_sender_expected = u128_at(
+        &ordering_fixture,
+        "/expected/balances/0/balance",
+        ordering_fixture_path,
+    );
+    let ordering_first_recipient_expected = u128_at(
+        &ordering_fixture,
+        "/expected/balances/1/balance",
+        ordering_fixture_path,
+    );
+    let ordering_second_recipient_expected = u128_at(
+        &ordering_fixture,
+        "/expected/balances/2/balance",
+        ordering_fixture_path,
+    );
+
+    assert_eq!(ordering_initial, 30);
+    assert_eq!(first_tx_value, 20);
+    assert_eq!(second_tx_value, 15);
+    assert!(first_tx_value <= ordering_initial);
+    assert!(second_tx_value > ordering_initial - first_tx_value);
+    assert_eq!(ordering_sender_expected, ordering_initial - first_tx_value);
+    assert_eq!(ordering_first_recipient_expected, first_tx_value);
+    assert_eq!(ordering_second_recipient_expected, 0);
+
+    let hex_fixture_path =
+        "vectors/ethereum-state-tests/minimal/nested/004-hex-transfer-success.json";
+    let hex_fixture = fixture_document(hex_fixture_path);
+    let hex_initial = u128_at(
+        &hex_fixture,
+        "/initial_accounts/0/balance",
+        hex_fixture_path,
+    );
+    let hex_tx_value = u128_at(&hex_fixture, "/transactions/0/value", hex_fixture_path);
+    let hex_sender_expected = u128_at(
+        &hex_fixture,
+        "/expected/balances/0/balance",
+        hex_fixture_path,
+    );
+    let hex_recipient_expected = u128_at(
+        &hex_fixture,
+        "/expected/balances/1/balance",
+        hex_fixture_path,
+    );
+    assert_eq!(hex_initial, 100);
+    assert_eq!(hex_tx_value, 25);
+    assert_eq!(hex_sender_expected, hex_initial - hex_tx_value);
+    assert_eq!(hex_recipient_expected, hex_tx_value);
 }
