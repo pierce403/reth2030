@@ -201,3 +201,5 @@ Reflection cadence:
 - Added `state_transition_seed_contract` tests to lock the checked Phase 1 account/storage transition seed (`TODO.md` checkmark + required state-unit coverage + fail-closed missing-sender transfer behavior).
 - Hardened `InMemoryState::transfer` fail-closed semantics by avoiding sender account creation on insufficient-balance errors for previously missing senders.
 - Learned pitfall: using `entry(...).or_default()` before insufficient-balance validation can silently mutate state on failed transfers; validate first, then persist mutations.
+- Hardened `minimal_executable_block_flow_seed_contract` with mixed transaction variant coverage (`Legacy`, `Eip1559`, `Blob`) for pre/post-execution block shapes plus header gas-limit fail-closed precedence checks.
+- Learned pitfall: minimal-flow seed coverage that only exercises legacy transactions can miss representability drift in non-legacy tx variants and validation-order guarantees.
