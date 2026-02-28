@@ -11,11 +11,12 @@ use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction, Va
 
 const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] A block execution pipeline exists end-to-end in-process.";
-const REQUIRED_EXECUTION_PIPELINE_FRAGMENTS: [&str; 6] = [
+const REQUIRED_EXECUTION_PIPELINE_FRAGMENTS: [&str; 7] = [
     "block.validate_basic()?;",
     "for (index, tx) in block.transactions.iter().enumerate() {",
     "state.apply_transaction(tx)?;",
     "checked_add(gas_used)",
+    "if attempted > block.header.gas_limit {",
     "receipts.push(Receipt",
     "Ok(BlockExecutionResult",
 ];
@@ -261,6 +262,53 @@ fn pipeline_stops_at_first_failing_transaction_and_keeps_prior_progress_only() {
     assert!(state.get_account(&addr(0x03)).is_none());
 
     assert_eq!(sender.balance, 2);
+    assert_eq!(sender.nonce, 1);
+    assert_eq!(first_recipient.balance, 4);
+}
+
+#[test]
+fn pipeline_rejects_transaction_that_pushes_block_over_gas_limit_without_applying_it() {
+    let engine = SimpleExecutionEngine::default();
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy(addr(0x01), addr(0x02), 0, 4),
+            mk_legacy(addr(0x01), addr(0x03), 1, 5),
+        ],
+        21_000,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 9,
+            ..Account::default()
+        },
+    );
+
+    let err = engine
+        .execute_block(&mut state, &block)
+        .expect_err("second tx should fail block-level gas-limit guard");
+
+    assert_eq!(
+        err,
+        ExecutionError::GasLimitExceeded {
+            gas_limit: 21_000,
+            attempted: 42_000,
+            tx_index: 1,
+        }
+    );
+
+    let sender = state.get_account(&addr(0x01)).expect("sender account");
+    let first_recipient = state
+        .get_account(&addr(0x02))
+        .expect("first recipient account should be created");
+    assert!(
+        state.get_account(&addr(0x03)).is_none(),
+        "second recipient must not be created when gas limit check fails pre-state"
+    );
+
+    assert_eq!(sender.balance, 5);
     assert_eq!(sender.nonce, 1);
     assert_eq!(first_recipient.balance, 4);
 }

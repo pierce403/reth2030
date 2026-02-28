@@ -193,3 +193,4 @@ Reflection cadence:
 - Learned pitfall: even when execution behavior tests exist, a checked seed task can still drift without a dedicated seed contract tied to the exact TODO line and API boundary.
 - Added `block_execution_pipeline_seed_contract` tests to lock the checked Phase 2 acceptance criterion (`TODO.md` checkmark + execution pipeline source wiring + end-to-end in-process success/fail-closed behavior).
 - Learned pitfall: source-fragment contract assertions can be overly formatting-sensitive around method chaining; prefer whitespace-normalized, token-stable fragment checks.
+- Hardened block execution pipeline seed coverage with a block-gas-limit edge case: when cumulative gas would exceed `header.gas_limit`, execution fails before applying the offending tx while preserving prior successful tx state.
