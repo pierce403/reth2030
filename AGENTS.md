@@ -241,3 +241,5 @@ Reflection cadence:
 - Learned pitfall: shell-keyword fail-closed checks should validate token boundaries (for example `if`/`then`) so safe argument substrings (for example `office-thenable`) do not trigger false positives.
 - Hardened mocked-sync runtime coverage for peer-slot saturation by a different peer: repeated `run_mock_sync_once` attempts fail closed (`MaxPeersReached`) without mutating the connected peer, and the loop recovers deterministically once the slot is freed.
 - Hardened `mock_sync_seed_contract` so this saturation/recovery runtime test remains required and the checked seed acceptance does not silently regress.
+- Hardened startup/shutdown runtime coverage for stopped-state re-entry: calling `execute(...)` after a completed execute must fail closed at `start` and preserve prior peer events/logs/metrics without mutation.
+- Learned behavior: once `NodeRuntime` reaches `Stopped`, further `execute(...)` calls are intentionally non-restartable and should leave observability state unchanged.

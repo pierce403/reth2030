@@ -736,4 +736,48 @@ mod tests {
             .expect("runtime should still shut down cleanly");
         assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
     }
+
+    #[test]
+    fn execute_fails_closed_when_called_after_shutdown() {
+        let mut runtime = runtime_with_max_peers(1);
+        runtime
+            .execute(true)
+            .expect("first execute should start, run mock sync, and shut down");
+
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
+        let baseline_peer_count = runtime.sync.peer_manager.peer_count();
+        let baseline_events = runtime.sync.peer_manager.events().to_vec();
+        let baseline_logs = runtime.sync.peer_manager.lifecycle_logs().to_vec();
+        let baseline_metrics = runtime.sync.peer_manager.metrics_snapshot();
+
+        let err = runtime
+            .execute(true)
+            .expect_err("execute should fail closed after runtime is already stopped");
+
+        assert_eq!(
+            err,
+            NodeRuntimeError::InvalidLifecycleState {
+                action: "start",
+                state: RuntimeState::Stopped,
+            }
+        );
+        assert_eq!(
+            runtime.lifecycle,
+            RuntimeState::Stopped,
+            "failed execute must not mutate lifecycle when start fails from stopped"
+        );
+        assert_eq!(runtime.sync.peer_manager.peer_count(), baseline_peer_count);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            baseline_events.as_slice()
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            baseline_logs.as_slice()
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.metrics_snapshot(),
+            baseline_metrics
+        );
+    }
 }
