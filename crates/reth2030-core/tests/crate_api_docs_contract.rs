@@ -3,7 +3,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use syn::{Item, UseTree, Visibility};
+use syn::{Attribute, Item, UseTree, Visibility};
 
 const TODO_ACCEPTANCE_LINE: &str = "- [x] Public APIs are documented at crate-level.";
 
@@ -84,7 +84,10 @@ fn parse_documented_symbols(section_lines: &[&str]) -> BTreeSet<String> {
             continue;
         }
 
-        symbols.insert(symbol.to_owned());
+        assert!(
+            symbols.insert(symbol.to_owned()),
+            "duplicate `## Public API` symbol entry: {symbol}"
+        );
     }
 
     symbols
@@ -92,6 +95,12 @@ fn parse_documented_symbols(section_lines: &[&str]) -> BTreeSet<String> {
 
 fn is_public(vis: &Visibility) -> bool {
     matches!(vis, Visibility::Public(_))
+}
+
+fn has_macro_export_attr(attrs: &[Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("macro_export"))
 }
 
 fn collect_public_use_tree_symbols(tree: &UseTree, symbols: &mut BTreeSet<String>) {
@@ -140,6 +149,14 @@ fn collect_public_item_symbols(item: Item, symbols: &mut BTreeSet<String>) {
         }
         Item::Static(item_static) if is_public(&item_static.vis) => {
             symbols.insert(item_static.ident.to_string());
+        }
+        Item::Macro(item_macro) if has_macro_export_attr(&item_macro.attrs) => {
+            let symbol = item_macro
+                .ident
+                .as_ref()
+                .expect("macro_export entries must be named")
+                .to_string();
+            symbols.insert(symbol);
         }
         Item::Struct(item_struct) if is_public(&item_struct.vis) => {
             symbols.insert(item_struct.ident.to_string());
@@ -261,6 +278,16 @@ fn parse_documented_symbols_ignores_non_bullets_and_malformed_entries() {
 }
 
 #[test]
+#[should_panic(expected = "duplicate `## Public API` symbol entry: Foo")]
+fn parse_documented_symbols_rejects_duplicate_symbols() {
+    let section = [
+        "- `Foo`: first description",
+        "- `Foo`: duplicate description",
+    ];
+    let _ = parse_documented_symbols(&section);
+}
+
+#[test]
 fn parse_public_symbols_from_source_collects_public_root_items_and_reexports() {
     let source = r#"
 pub use crate::alpha::{Foo, bar::Baz as Qux, nested::Zed};
@@ -314,6 +341,23 @@ mod nested {
 
     let symbols = parse_public_symbols_from_source(source);
     assert_eq!(symbols, BTreeSet::from(["Api".to_owned()]));
+}
+
+#[test]
+fn parse_public_symbols_from_source_includes_macro_export_entries() {
+    let source = r#"
+#[macro_export]
+macro_rules! exported_macro {
+    () => {};
+}
+
+macro_rules! private_macro {
+    () => {};
+}
+"#;
+
+    let symbols = parse_public_symbols_from_source(source);
+    assert_eq!(symbols, BTreeSet::from(["exported_macro".to_owned()]));
 }
 
 #[test]

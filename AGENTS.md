@@ -283,3 +283,5 @@ Reflection cadence:
 - Learned behavior: self-transfers execute as debit-then-credit on the same account, so saturation preserves capped balance/nonce while retaining code and storage across deterministic replays.
 - Hardened `execution_ordering` integration coverage with ordered intrinsic-gas failure and block-gas-limit partial-progress edge cases across mixed transaction variants.
 - Learned behavior: intrinsic-gas or block-gas-limit failure halts later transactions fail-closed while preserving prior ordered state progress, so transaction ordering changes which recipients are funded before the halt.
+- Hardened `crate_api_docs_contract` to fail closed on duplicate symbols in crate-level `## Public API` bullet lists and to treat `#[macro_export]` macros as documented public API requirements.
+- Learned pitfall: in this `syn` version, `ItemMacro` does not expose visibility metadata, so macro export detection must key off `#[macro_export]` attributes instead of `pub` visibility checks.
