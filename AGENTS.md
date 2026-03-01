@@ -305,3 +305,5 @@ Reflection cadence:
 - Learned pitfall: count/date/pass-rate invariants can still pass when unreviewed JSON keys are silently added; enforce explicit allowed-key contracts for conformance history artifacts.
 - Hardened `minimal_executable_block_flow_seed_contract` with zero-gas mixed-variant post-execution coverage (`Legacy`/`Eip1559`/`Blob`) and JSON roundtrip assertions.
 - Learned behavior: `Block::validate_basic` intentionally accepts zero-gas plateau receipts when `header.gas_limit == header.gas_used == 0` and receipt count/final-gas invariants hold, preserving no-op execution trace representability.
+- Hardened peer lifecycle observability coverage with a max-peer/overflow precedence test that locks rejected-peer logs/metrics behavior when `next_session_id == u64::MAX`.
+- Learned behavior: when a new peer is rejected at max peers, `PeerManager::connect` fails with `MaxPeersReached` before session allocation, preserving the existing session and emitting deterministic rejection observability signals.

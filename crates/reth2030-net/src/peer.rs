@@ -376,6 +376,51 @@ mod tests {
     }
 
     #[test]
+    fn max_peers_rejection_takes_precedence_over_session_id_overflow_for_new_peer() {
+        let mut manager = PeerManager::new(1);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("first connect must succeed");
+        manager.next_session_id = u64::MAX;
+
+        let err = manager
+            .connect(PeerInfo::new(peer_id(2), "127.0.0.1:30304"))
+            .expect_err("new peer should still fail with max-peers rejection");
+
+        assert_eq!(err, PeerManagerError::MaxPeersReached { max_peers: 1 });
+        assert_eq!(manager.peer_count(), 1);
+        assert_eq!(manager.next_session_id, u64::MAX);
+        assert_eq!(
+            manager
+                .session(&peer_id(1))
+                .expect("existing peer session should remain unchanged")
+                .session_id,
+            1
+        );
+        assert_eq!(
+            manager.events(),
+            &[
+                PeerEvent::Connected(peer_id(1)),
+                PeerEvent::RejectedMaxPeers(peer_id(2)),
+            ]
+        );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.rejected_max_peers peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(2))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, 0, 1, 1));
+    }
+
+    #[test]
     fn rejected_new_peer_does_not_consume_next_session_id() {
         let mut manager = PeerManager::new(1);
 
