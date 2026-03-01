@@ -259,3 +259,5 @@ Reflection cadence:
 - Added `execution_ordering_seed_contract` tests to lock the checked Phase 2 task for multi-transaction execution ordering (`TODO.md` checkmark + required integration-test presence + order-dependent first-success behavior contract).
 - Hardened `execution_ordering` integration coverage with cross-sender funding dependencies and mixed-variant dependency-chain halt semantics (first failure stops later transactions while preserving prior progress).
 - Learned pitfall: ordering tests that rely on state-level failure precedence must set explicit block gas limits; the default helper gas limit can trigger `GasLimitExceeded` before the intended balance failure path.
+- Hardened `reth2030-vectors` fixture discovery to fail closed on symlinked file/directory entries, preventing recursive link traversal and non-canonical fixture injection.
+- Learned pitfall: using `Path::is_dir()` alone in recursive fixture walkers follows symlinks; use `fs::symlink_metadata` + `file_type` checks to keep traversal deterministic and bounded.

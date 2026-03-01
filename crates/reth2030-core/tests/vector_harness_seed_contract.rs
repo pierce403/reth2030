@@ -12,11 +12,13 @@ const REQUIRED_MANIFEST_FIELDS: [&str; 3] = [
 ];
 const REQUIRED_STRICT_SCHEMA_STRUCTS: [&str; 4] =
     ["Fixture", "FixtureBalance", "FixtureTx", "FixtureExpected"];
-const REQUIRED_HARNESS_SOURCE_FRAGMENTS: [&str; 11] = [
+const REQUIRED_HARNESS_SOURCE_FRAGMENTS: [&str; 13] = [
     "#[command(name = \"reth2030-vectors\")]",
     "fn load_fixtures(fixtures_dir: &Path) -> Result<Vec<Fixture>, String>",
     "let paths = collect_fixture_paths(fixtures_dir)?;",
     "collect_fixture_paths_recursive(fixtures_dir, &mut paths)?;",
+    "let metadata = fs::symlink_metadata(&path)",
+    "if metadata.file_type().is_symlink() {",
     "fn execute_fixture(fixture: &Fixture) -> Result<FixtureRun, String>",
     "fn generate_reports(fixtures: &[Fixture]) -> Result<(Scorecard, SnapshotReport), String>",
     "fn compare_with_baseline(label: &str, baseline_path: &Path, generated: &str) -> Result<(), String>",
@@ -25,12 +27,14 @@ const REQUIRED_HARNESS_SOURCE_FRAGMENTS: [&str; 11] = [
     "compare_with_baseline(\"scorecard\", &args.baseline_scorecard, &scorecard_json)?;",
     "compare_with_baseline(\"snapshot\", &args.baseline_snapshot, &snapshot_json)?;",
 ];
-const REQUIRED_HARNESS_EDGE_CASE_TESTS: [&str; 10] = [
+const REQUIRED_HARNESS_EDGE_CASE_TESTS: [&str; 12] = [
     "parse_u128_accepts_decimal_and_hex",
     "parse_u128_rejects_invalid_values",
     "load_fixtures_recurses_into_nested_directories",
     "load_fixtures_rejects_duplicate_fixture_names",
     "load_fixtures_rejects_unknown_fields",
+    "load_fixtures_rejects_symlinked_fixture_file",
+    "load_fixtures_rejects_symlinked_fixture_directory",
     "execute_fixture_accepts_hex_numeric_fields",
     "execute_fixture_flags_unexpected_post_state_accounts",
     "execute_fixture_rejects_duplicate_expected_balances",

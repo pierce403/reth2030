@@ -237,12 +237,24 @@ fn collect_fixture_paths_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result
     paths.sort();
 
     for path in paths {
-        if path.is_dir() {
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|err| format!("failed to stat fixture path {}: {}", path.display(), err))?;
+
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "fixture path must not be a symlink: {}",
+                path.display()
+            ));
+        }
+
+        if metadata.file_type().is_dir() {
             collect_fixture_paths_recursive(&path, out)?;
             continue;
         }
 
-        if path.extension().and_then(|value| value.to_str()) == Some("json") {
+        if metadata.file_type().is_file()
+            && path.extension().and_then(|value| value.to_str()) == Some("json")
+        {
             out.push(path);
         }
     }
@@ -468,6 +480,8 @@ mod tests {
         compare_with_baseline, execute_fixture, generate_reports, load_fixtures, parse_address,
         parse_u128, Fixture, FixtureBalance, FixtureExpected, FixtureTx,
     };
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -621,6 +635,40 @@ mod tests {
         let err = load_fixtures(&temp_dir.path).expect_err("must reject unknown fields");
         assert!(err.contains("unknown field"));
         assert!(err.contains("unexpected"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn load_fixtures_rejects_symlinked_fixture_file() {
+        let temp_dir = TempDir::new("symlink-file");
+        let target = temp_dir.path.join("real/fixture.json");
+        write_file(&target, &minimal_fixture_json("real-fixture"));
+
+        let symlink_path = temp_dir.path.join("linked-fixture.json");
+        symlink(&target, &symlink_path).expect("create symlinked fixture file");
+
+        let err = load_fixtures(&temp_dir.path).expect_err("symlinked fixtures must fail closed");
+        assert!(err.contains("fixture path must not be a symlink"));
+        assert!(err.contains("linked-fixture.json"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn load_fixtures_rejects_symlinked_fixture_directory() {
+        let temp_dir = TempDir::new("symlink-dir");
+        let target_dir = temp_dir.path.join("real/fixtures");
+        write_file(
+            &target_dir.join("001.json"),
+            &minimal_fixture_json("real-dir-fixture"),
+        );
+
+        let symlink_dir = temp_dir.path.join("linked-fixtures");
+        symlink(&target_dir, &symlink_dir).expect("create symlinked fixture directory");
+
+        let err = load_fixtures(&temp_dir.path)
+            .expect_err("symlinked fixture directories must fail closed");
+        assert!(err.contains("fixture path must not be a symlink"));
+        assert!(err.contains("linked-fixtures"));
     }
 
     #[test]
