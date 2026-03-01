@@ -170,6 +170,42 @@ fn types_represent_pre_execution_contract_creation_block_flow_with_mixed_tx_vari
 }
 
 #[test]
+fn types_represent_pre_execution_mixed_flow_json_roundtrip_with_empty_receipts() {
+    let block = Block {
+        header: minimal_header(30_000_000, 63_000),
+        transactions: vec![
+            minimal_legacy_tx(0, addr(0x81), addr(0x82), 1),
+            minimal_eip1559_contract_creation_tx(1, addr(0x83), 2),
+            minimal_blob_tx(2, addr(0x84), addr(0x85), 3),
+        ],
+        receipts: Vec::new(),
+    };
+
+    assert_eq!(block.validate_basic(), Ok(()));
+    assert_eq!(
+        block
+            .transactions
+            .iter()
+            .map(Transaction::to)
+            .collect::<Vec<_>>(),
+        vec![Some(addr(0x82)), None, Some(addr(0x85))]
+    );
+
+    let encoded = block.to_json_bytes().expect("block serialization");
+    let decoded = Block::from_json_bytes(&encoded).expect("block deserialization");
+    assert_eq!(decoded, block);
+    assert_eq!(decoded.validate_basic(), Ok(()));
+    assert_eq!(
+        decoded
+            .transactions
+            .iter()
+            .map(Transaction::to)
+            .collect::<Vec<_>>(),
+        vec![Some(addr(0x82)), None, Some(addr(0x85))]
+    );
+}
+
+#[test]
 fn types_represent_minimal_post_execution_block_flow_and_json_roundtrip() {
     let block = Block {
         header: minimal_header(30_000_000, 21_000),
@@ -282,6 +318,25 @@ fn minimal_block_flow_rejects_receipt_count_mismatch() {
             minimal_legacy_tx(0, addr(0x01), addr(0x02), 1),
             minimal_legacy_tx(1, addr(0x01), addr(0x03), 2),
         ],
+        receipts: vec![Receipt {
+            tx_hash: [1; 32],
+            success: true,
+            cumulative_gas_used: 21_000,
+            logs: Vec::new(),
+        }],
+    };
+
+    assert_eq!(
+        block.validate_basic(),
+        Err(ValidationError::ReceiptCountMismatch)
+    );
+}
+
+#[test]
+fn minimal_block_flow_rejects_receipts_without_transactions() {
+    let block = Block {
+        header: minimal_header(30_000_000, 21_000),
+        transactions: Vec::new(),
         receipts: vec![Receipt {
             tx_hash: [1; 32],
             success: true,

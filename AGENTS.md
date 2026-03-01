@@ -297,3 +297,5 @@ Reflection cadence:
 - Learned behavior: a zero-value transaction from a missing sender is not a no-op in this scaffold; it materializes sender/recipient accounts (`sender.nonce = 1`) and that partial progress must remain deterministic when later transactions fail.
 - Hardened `reth2030-vectors` address parsing and fixture execution coverage to accept uppercase `0X`-prefixed addresses in addition to lowercase `0x`.
 - Learned pitfall: supporting uppercase hex prefixes for numeric fields is insufficient if address parsing remains lowercase-only; fixture compatibility can regress unless both parser paths are kept aligned.
+- Hardened `minimal_executable_block_flow_seed_contract` with pre-execution block JSON roundtrip coverage for mixed transfer + contract-creation transactions while receipts remain empty.
+- Learned behavior: a block with receipts but zero transactions must fail closed with `ValidationError::ReceiptCountMismatch`, and pre-execution `to: None` transaction shape is preserved through `Block` JSON roundtrip.
