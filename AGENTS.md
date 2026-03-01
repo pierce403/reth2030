@@ -315,3 +315,5 @@ Reflection cadence:
 - Learned behavior: invalid-block validation failures are deterministic and fail closed before any state transition, preserving identical state snapshots across repeated runs.
 - Hardened startup/shutdown runtime coverage for `execute(false)` with pre-existing connected peers so the no-mock-sync path still performs deterministic peer cleanup during shutdown.
 - Learned behavior: `NodeRuntime::execute(false)` always runs shutdown cleanup after start, disconnecting any pre-connected peers in stable `PeerId` order and preserving observability counters.
+- Hardened `reth2030-types` numeric serde boundary coverage with fractional JSON-number rejection tests across all transaction `u128` fields (`Legacy`, `Eip1559`, `Blob`).
+- Learned behavior: numeric JSON input compatibility for `u128` fields is intentionally integer-only (`as_u64` back-compat); fractional JSON numbers must fail closed with the non-negative-integer guard.

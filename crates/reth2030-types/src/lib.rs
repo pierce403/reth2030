@@ -502,6 +502,154 @@ mod tests {
     }
 
     #[test]
+    fn transaction_u128_fields_reject_fractional_numeric_inputs_for_all_variants() {
+        let fractional_cases = vec![
+            (
+                "legacy.gas_price",
+                json!({
+                    "tx_type": "legacy",
+                    "nonce": 1,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "gas_price": 1.5,
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "legacy.value",
+                json!({
+                    "tx_type": "legacy",
+                    "nonce": 1,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "gas_price": "1",
+                    "value": 0.5,
+                    "data": []
+                }),
+            ),
+            (
+                "eip1559.max_fee_per_gas",
+                json!({
+                    "tx_type": "eip1559",
+                    "nonce": 2,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": 1.25,
+                    "max_priority_fee_per_gas": "1",
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "eip1559.max_priority_fee_per_gas",
+                json!({
+                    "tx_type": "eip1559",
+                    "nonce": 2,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": 1.75,
+                    "value": "0",
+                    "data": []
+                }),
+            ),
+            (
+                "eip1559.value",
+                json!({
+                    "tx_type": "eip1559",
+                    "nonce": 2,
+                    "from": vec![1_u8; 20],
+                    "to": null,
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "value": 2.5,
+                    "data": []
+                }),
+            ),
+            (
+                "blob.max_fee_per_gas",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": 3.25,
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![7_u8; 32]]
+                }),
+            ),
+            (
+                "blob.max_priority_fee_per_gas",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": 3.75,
+                    "max_fee_per_blob_gas": "1",
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![7_u8; 32]]
+                }),
+            ),
+            (
+                "blob.max_fee_per_blob_gas",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": 4.5,
+                    "value": "0",
+                    "data": [],
+                    "blob_versioned_hashes": [vec![7_u8; 32]]
+                }),
+            ),
+            (
+                "blob.value",
+                json!({
+                    "tx_type": "blob",
+                    "nonce": 3,
+                    "from": vec![1_u8; 20],
+                    "to": vec![2_u8; 20],
+                    "gas_limit": 21_000,
+                    "max_fee_per_gas": "1",
+                    "max_priority_fee_per_gas": "1",
+                    "max_fee_per_blob_gas": "1",
+                    "value": 5.5,
+                    "data": [],
+                    "blob_versioned_hashes": [vec![7_u8; 32]]
+                }),
+            ),
+        ];
+
+        for (field, candidate) in fractional_cases {
+            let err = serde_json::from_value::<Transaction>(candidate)
+                .expect_err("fractional number must fail")
+                .to_string();
+            assert!(
+                err.contains("u128 must be a non-negative integer"),
+                "unexpected error for {field}: {err}"
+            );
+        }
+    }
+
+    #[test]
     fn transaction_u128_fields_accept_max_string_inputs_for_all_variants() {
         let max = u128::MAX.to_string();
 

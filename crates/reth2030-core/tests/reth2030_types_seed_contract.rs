@@ -35,8 +35,9 @@ const REQUIRED_PUBLIC_SYMBOLS: [&str; 11] = [
     "ValidationError",
     "Block",
 ];
-const REQUIRED_EDGE_CASE_UNIT_TESTS: [&str; 12] = [
+const REQUIRED_EDGE_CASE_UNIT_TESTS: [&str; 13] = [
     "transaction_u128_fields_accept_max_string_inputs_for_all_variants",
+    "transaction_u128_fields_reject_fractional_numeric_inputs_for_all_variants",
     "transaction_u128_fields_reject_overflow_string_inputs",
     "transaction_u128_fields_reject_negative_integer",
     "transaction_u128_fields_reject_non_numeric_types",
