@@ -10,6 +10,7 @@ const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] A documented conformance metric is tracked over time.";
 const EXPECTED_METRIC: &str = "minimal-state-tests-pass-rate";
 const EXPECTED_SUITE: &str = "minimal-state-tests";
+const EXPECTED_DESCRIPTION_FIXTURE_PATH: &str = "vectors/ethereum-state-tests/minimal";
 const EXPECTED_BOOTSTRAP_RECORDED_ON: &str = "2026-02-27";
 const EXPECTED_BOOTSTRAP_TOTAL: u64 = 4;
 const EXPECTED_BOOTSTRAP_PASSED: u64 = 3;
@@ -113,6 +114,19 @@ fn validate_time_series_history(history: &Value) -> Result<(), String> {
     if metric != EXPECTED_METRIC {
         return Err(format!(
             "conformance history root.metric must be `{EXPECTED_METRIC}`, found `{metric}`"
+        ));
+    }
+
+    let description = as_str(
+        require_key(root, "description", "conformance history root")?,
+        "conformance history root.description",
+    )?;
+    if description.trim().is_empty() {
+        return Err("conformance history root.description must be non-empty".to_string());
+    }
+    if !description.contains(EXPECTED_DESCRIPTION_FIXTURE_PATH) {
+        return Err(format!(
+            "conformance history root.description must reference `{EXPECTED_DESCRIPTION_FIXTURE_PATH}`"
         ));
     }
 
@@ -339,7 +353,7 @@ fn validate_bootstrap_entry(history: &Value) -> Result<(), String> {
 fn history_fixture(entries: Value) -> Value {
     json!({
         "metric": EXPECTED_METRIC,
-        "description": "fixture",
+        "description": format!("Historical scorecard trend for {EXPECTED_DESCRIPTION_FIXTURE_PATH}."),
         "entries": entries
     })
 }
@@ -435,6 +449,86 @@ fn validate_time_series_history_rejects_single_entry_or_non_monotonic_dates() {
     let err =
         validate_time_series_history(&non_monotonic).expect_err("non-monotonic dates must fail");
     assert!(err.contains("strictly increasing"));
+}
+
+#[test]
+fn validate_time_series_history_rejects_missing_or_undocumented_description() {
+    let missing_description = json!({
+        "metric": EXPECTED_METRIC,
+        "entries": [
+            {
+                "recorded_on": "2026-02-27",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 3,
+                "failed": 1,
+                "pass_rate": 0.75
+            },
+            {
+                "recorded_on": "2026-02-28",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 4,
+                "failed": 0,
+                "pass_rate": 1.0
+            }
+        ]
+    });
+    let err = validate_time_series_history(&missing_description)
+        .expect_err("missing description must fail validation");
+    assert!(err.contains("missing key `description`"));
+
+    let empty_description = json!({
+        "metric": EXPECTED_METRIC,
+        "description": "   ",
+        "entries": [
+            {
+                "recorded_on": "2026-02-27",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 3,
+                "failed": 1,
+                "pass_rate": 0.75
+            },
+            {
+                "recorded_on": "2026-02-28",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 4,
+                "failed": 0,
+                "pass_rate": 1.0
+            }
+        ]
+    });
+    let err = validate_time_series_history(&empty_description)
+        .expect_err("empty description must fail validation");
+    assert!(err.contains("must be non-empty"));
+
+    let undocumented_description = json!({
+        "metric": EXPECTED_METRIC,
+        "description": "Historical scorecard trend for a local fixture suite.",
+        "entries": [
+            {
+                "recorded_on": "2026-02-27",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 3,
+                "failed": 1,
+                "pass_rate": 0.75
+            },
+            {
+                "recorded_on": "2026-02-28",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 4,
+                "failed": 0,
+                "pass_rate": 1.0
+            }
+        ]
+    });
+    let err = validate_time_series_history(&undocumented_description)
+        .expect_err("description without fixture reference must fail validation");
+    assert!(err.contains("must reference"));
 }
 
 #[test]

@@ -289,3 +289,5 @@ Reflection cadence:
 - Learned behavior: `NodeRuntime::execute(true)` fail-closed mock-sync errors preserve rejection observability while appending deterministic disconnect signals from shutdown for already-connected peers.
 - Hardened `InMemoryState` deterministic transition coverage with mixed-variant (`Legacy`/`Eip1559`/`Blob`) replay tests for both success (including contract creation) and cross-sender partial-progress failure paths.
 - Learned behavior: in mixed-variant `apply_transactions` sequences, a failed sender debit leaves that sender nonce unchanged, halts subsequent transactions fail-closed, and preserves all earlier successful state progress deterministically across reruns.
+- Hardened `conformance_metric_seed_contract` to require non-empty conformance-history descriptions that reference the tracked fixture path (`vectors/ethereum-state-tests/minimal`).
+- Learned pitfall: timeline arithmetic/date invariants can still pass while metric documentation drifts; fail closed on missing or underspecified `conformance-history` descriptions.
