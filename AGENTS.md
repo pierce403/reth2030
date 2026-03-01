@@ -245,3 +245,6 @@ Reflection cadence:
 - Learned behavior: once `NodeRuntime` reaches `Stopped`, further `execute(...)` calls are intentionally non-restartable and should leave observability state unchanged.
 - Added `vector_harness_seed_contract` tests to lock the checked Phase 5 seed outcome (`TODO.md` checkmark + workspace/member + vectors crate manifest + fixture-harness pipeline wiring + edge-case unit-test coverage contract).
 - Learned pitfall: CI vector-suite contract coverage alone does not guarantee the vector harness seed remains intact; keep a dedicated seed contract tied to the exact TODO line and harness source/test invariants.
+- Added `state_backend_determinism_seed_contract` tests to lock the checked Phase 1 acceptance criterion (`TODO.md` checkmark + deterministic transition test-presence contract + replay parity on success and fail-closed paths).
+- Hardened `InMemoryState` deterministic transition coverage with replay edge cases for partial-progress failure, contract-creation sender-only mutation, and interleaved storage writes.
+- Learned pitfall: deterministic transition coverage must validate both error equality and post-state snapshot parity; success-only replay assertions can miss fail-closed drift.

@@ -142,7 +142,7 @@ impl StateStore for InMemoryState {
 #[cfg(test)]
 mod tests {
     use super::{Account, InMemoryState, StateError, StateStore};
-    use reth2030_types::{LegacyTx, Transaction};
+    use reth2030_types::{Eip1559Tx, LegacyTx, Transaction};
 
     fn addr(byte: u8) -> [u8; 20] {
         [byte; 20]
@@ -421,5 +421,121 @@ mod tests {
         state_b.apply_transactions(&[tx1, tx2]).expect("second run");
 
         assert_eq!(state_a.snapshot(), state_b.snapshot());
+    }
+
+    #[test]
+    fn apply_transactions_partial_progress_failure_is_deterministic() {
+        let txs = vec![
+            Transaction::Legacy(LegacyTx {
+                nonce: 0,
+                from: addr(0x01),
+                to: Some(addr(0x02)),
+                gas_limit: 21_000,
+                gas_price: 1,
+                value: 8,
+                data: Vec::new(),
+            }),
+            Transaction::Legacy(LegacyTx {
+                nonce: 1,
+                from: addr(0x01),
+                to: Some(addr(0x03)),
+                gas_limit: 21_000,
+                gas_price: 1,
+                value: 8,
+                data: Vec::new(),
+            }),
+        ];
+
+        let mut state_a = InMemoryState::new();
+        state_a.upsert_account(
+            addr(0x01),
+            Account {
+                balance: 10,
+                ..Account::default()
+            },
+        );
+        let mut state_b = state_a.clone();
+
+        let err_a = state_a
+            .apply_transactions(&txs)
+            .expect_err("first run must fail");
+        let err_b = state_b
+            .apply_transactions(&txs)
+            .expect_err("second run must fail");
+
+        assert_eq!(err_a, err_b);
+        assert_eq!(
+            err_a,
+            StateError::InsufficientBalance {
+                address: addr(0x01),
+                available: 2,
+                requested: 8,
+            }
+        );
+        assert_eq!(state_a.snapshot(), state_b.snapshot());
+
+        let sender = state_a.get_account(&addr(0x01)).expect("sender account");
+        let first_recipient = state_a.get_account(&addr(0x02)).expect("recipient account");
+        assert_eq!(sender.balance, 2);
+        assert_eq!(sender.nonce, 1);
+        assert_eq!(first_recipient.balance, 8);
+        assert_eq!(state_a.get_account(&addr(0x03)), None);
+    }
+
+    #[test]
+    fn apply_transaction_contract_creation_is_deterministic() {
+        let tx = Transaction::Eip1559(Eip1559Tx {
+            nonce: 0,
+            from: addr(0x0a),
+            to: None,
+            gas_limit: 21_000,
+            max_fee_per_gas: 1,
+            max_priority_fee_per_gas: 1,
+            value: 4,
+            data: vec![0xca, 0xfe],
+        });
+
+        let mut state_a = InMemoryState::new();
+        state_a.upsert_account(
+            addr(0x0a),
+            Account {
+                balance: 9,
+                ..Account::default()
+            },
+        );
+        let mut state_b = state_a.clone();
+
+        state_a.apply_transaction(&tx).expect("first run");
+        state_b.apply_transaction(&tx).expect("second run");
+
+        assert_eq!(state_a.snapshot(), state_b.snapshot());
+        assert_eq!(state_a.snapshot().len(), 1);
+
+        let sender = state_a.get_account(&addr(0x0a)).expect("sender account");
+        assert_eq!(sender.balance, 5);
+        assert_eq!(sender.nonce, 1);
+    }
+
+    #[test]
+    fn storage_transition_sequence_is_deterministic_across_replays() {
+        let key_a = [0x01; 32];
+        let key_b = [0x02; 32];
+
+        let mut state_a = InMemoryState::new();
+        state_a.set_storage(addr(0x01), key_a, [0x10; 32]);
+        state_a.set_storage(addr(0x02), key_a, [0x20; 32]);
+        state_a.set_storage(addr(0x01), key_b, [0x30; 32]);
+        state_a.set_storage(addr(0x01), key_a, [0x40; 32]);
+
+        let mut state_b = InMemoryState::new();
+        state_b.set_storage(addr(0x01), key_a, [0x10; 32]);
+        state_b.set_storage(addr(0x02), key_a, [0x20; 32]);
+        state_b.set_storage(addr(0x01), key_b, [0x30; 32]);
+        state_b.set_storage(addr(0x01), key_a, [0x40; 32]);
+
+        assert_eq!(state_a.snapshot(), state_b.snapshot());
+        assert_eq!(state_a.get_storage(&addr(0x01), &key_a), Some([0x40; 32]));
+        assert_eq!(state_a.get_storage(&addr(0x01), &key_b), Some([0x30; 32]));
+        assert_eq!(state_a.get_storage(&addr(0x02), &key_a), Some([0x20; 32]));
     }
 }
