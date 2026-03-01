@@ -321,3 +321,5 @@ Reflection cadence:
 - Learned behavior: `PeerManager::clear_events` resets only `events()`; subsequent lifecycle transitions append to existing `lifecycle_logs`, keep counters cumulative, and still update `active_peers` to current session count.
 - Hardened `execution_determinism_seed_contract` with repeated-run no-op execution coverage through `Box<dyn ExecutionEngine>` + `&mut dyn StateStore` for mixed `Legacy`/`Eip1559`/`Blob` transactions.
 - Learned behavior: `SimpleExecutionEngine::no_op()` preserves deterministic zero-gas outputs (plateau cumulative gas/receipts) while still applying deterministic state transitions, including zero-value missing-sender account materialization and sender-only contract creation effects.
+- Hardened `crate_api_docs_contract` to auto-discover workspace library crate entrypoints (`crates/*/src/lib.rs`) so newly added library crates are fail-closed by crate-level `## Public API` documentation parity checks.
+- Learned pitfall: parsing `pub use ...::{self, ...}` re-exports naively can mis-document the symbol as literal `self`; carry path-segment context when extracting exported symbols from `syn::UseTree`.

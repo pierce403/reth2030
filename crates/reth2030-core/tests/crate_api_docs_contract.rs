@@ -17,6 +17,50 @@ fn read_repo_file(relative_path: &str) -> String {
         .unwrap_or_else(|err| panic!("failed reading {}: {err}", path.display()))
 }
 
+fn workspace_library_crate_lib_rs_paths() -> Vec<String> {
+    let crates_dir = repo_root().join("crates");
+    let mut entries: Vec<_> = fs::read_dir(&crates_dir)
+        .unwrap_or_else(|err| panic!("failed reading {}: {err}", crates_dir.display()))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|err| panic!("failed enumerating {}: {err}", crates_dir.display()));
+    entries.sort_by_key(|entry| entry.file_name());
+
+    let mut library_paths = Vec::new();
+    for entry in entries {
+        let crate_dir = entry.path();
+        let metadata = fs::symlink_metadata(&crate_dir)
+            .unwrap_or_else(|err| panic!("failed reading metadata {}: {err}", crate_dir.display()));
+        if metadata.file_type().is_symlink() {
+            panic!(
+                "workspace crate directory must not be a symlink: {}",
+                crate_dir.display()
+            );
+        }
+        if !metadata.is_dir() {
+            continue;
+        }
+
+        let crate_name = entry.file_name().to_string_lossy().to_string();
+        let lib_rs = crate_dir.join("src/lib.rs");
+        if !lib_rs.exists() {
+            continue;
+        }
+        let lib_metadata = fs::symlink_metadata(&lib_rs)
+            .unwrap_or_else(|err| panic!("failed reading metadata {}: {err}", lib_rs.display()));
+        if lib_metadata.file_type().is_symlink() {
+            panic!(
+                "library entrypoint must not be a symlink: {}",
+                lib_rs.display()
+            );
+        }
+        if lib_metadata.is_file() {
+            library_paths.push(format!("crates/{crate_name}/src/lib.rs"));
+        }
+    }
+
+    library_paths
+}
+
 fn crate_level_doc_lines(source: &str) -> Vec<&str> {
     let mut lines = Vec::new();
     let mut started = false;
@@ -103,18 +147,31 @@ fn has_macro_export_attr(attrs: &[Attribute]) -> bool {
         .any(|attr| attr.path().is_ident("macro_export"))
 }
 
-fn collect_public_use_tree_symbols(tree: &UseTree, symbols: &mut BTreeSet<String>) {
+fn collect_public_use_tree_symbols(
+    tree: &UseTree,
+    last_path_segment: Option<&str>,
+    symbols: &mut BTreeSet<String>,
+) {
     match tree {
         UseTree::Name(name) => {
-            symbols.insert(name.ident.to_string());
+            if name.ident == "self" {
+                let symbol = last_path_segment
+                    .unwrap_or_else(|| panic!("public `self` re-export must have a path segment"));
+                symbols.insert(symbol.to_owned());
+            } else {
+                symbols.insert(name.ident.to_string());
+            }
         }
         UseTree::Rename(rename) => {
             symbols.insert(rename.rename.to_string());
         }
-        UseTree::Path(path) => collect_public_use_tree_symbols(&path.tree, symbols),
+        UseTree::Path(path) => {
+            let segment = path.ident.to_string();
+            collect_public_use_tree_symbols(&path.tree, Some(&segment), symbols);
+        }
         UseTree::Group(group) => {
             for tree in &group.items {
-                collect_public_use_tree_symbols(tree, symbols);
+                collect_public_use_tree_symbols(tree, last_path_segment, symbols);
             }
         }
         UseTree::Glob(_) => {
@@ -174,7 +231,7 @@ fn collect_public_item_symbols(item: Item, symbols: &mut BTreeSet<String>) {
             symbols.insert(item_union.ident.to_string());
         }
         Item::Use(item_use) if is_public(&item_use.vis) => {
-            collect_public_use_tree_symbols(&item_use.tree, symbols);
+            collect_public_use_tree_symbols(&item_use.tree, None, symbols);
         }
         _ => {}
     }
@@ -323,6 +380,25 @@ pub fn run() {}
 }
 
 #[test]
+fn parse_public_symbols_from_source_supports_self_reexports() {
+    let source = r#"
+pub use crate::alpha::{self, nested::Thing};
+pub use crate::beta::{self as BetaApi, Item};
+"#;
+
+    let symbols = parse_public_symbols_from_source(source);
+    assert_eq!(
+        symbols,
+        BTreeSet::from([
+            "Item".to_owned(),
+            "Thing".to_owned(),
+            "BetaApi".to_owned(),
+            "alpha".to_owned(),
+        ])
+    );
+}
+
+#[test]
 fn parse_public_symbols_from_source_ignores_non_public_and_nested_items() {
     let source = r#"
 pub struct Api;
@@ -367,21 +443,26 @@ fn parse_public_symbols_from_source_rejects_public_glob_reexports() {
 }
 
 #[test]
-fn reth2030_core_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs("crates/reth2030-core/src/lib.rs");
+fn every_workspace_library_public_api_is_documented_at_crate_level() {
+    let library_paths = workspace_library_crate_lib_rs_paths();
+    assert!(
+        !library_paths.is_empty(),
+        "workspace must contain at least one library crate with src/lib.rs"
+    );
+
+    for relative_path in &library_paths {
+        assert_crate_public_api_docs(relative_path);
+    }
 }
 
 #[test]
-fn reth2030_types_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs("crates/reth2030-types/src/lib.rs");
-}
+fn workspace_library_crate_discovery_excludes_bin_only_crates() {
+    let library_paths = workspace_library_crate_lib_rs_paths();
+    let discovered = library_paths.into_iter().collect::<BTreeSet<_>>();
 
-#[test]
-fn reth2030_net_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs("crates/reth2030-net/src/lib.rs");
-}
-
-#[test]
-fn reth2030_rpc_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs("crates/reth2030-rpc/src/lib.rs");
+    assert!(!discovered.contains("crates/reth2030/src/lib.rs"));
+    assert!(discovered.contains("crates/reth2030-core/src/lib.rs"));
+    assert!(discovered.contains("crates/reth2030-net/src/lib.rs"));
+    assert!(discovered.contains("crates/reth2030-rpc/src/lib.rs"));
+    assert!(discovered.contains("crates/reth2030-types/src/lib.rs"));
 }
