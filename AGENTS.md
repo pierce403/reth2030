@@ -233,3 +233,5 @@ Reflection cadence:
 
 - Hardened `execution_engine_seed_contract` with dyn-dispatch edge coverage: `&dyn ExecutionEngine` helper callsites, external engine implementations, and invalid-block error propagation through trait objects.
 - Learned pitfall: state-focused engine contract tests must use the `StateStore` surface (`get_account`/`upsert_account`) and account for `Account::storage` in initializers to match current core APIs.
+- Hardened `conformance_metric_seed_contract` with arithmetic edge coverage so history entries fail closed when `passed + failed` overflows `u64`.
+- Learned pitfall: scorecard/history mismatch tests should isolate the `pass_rate` comparison path directly; otherwise field-level drift can mask regressions in the dedicated pass-rate guard.

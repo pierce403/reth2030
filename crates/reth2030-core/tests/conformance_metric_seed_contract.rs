@@ -469,6 +469,32 @@ fn validate_time_series_history_rejects_invalid_iso_dates() {
 }
 
 #[test]
+fn validate_time_series_history_rejects_pass_fail_overflow() {
+    let history = history_fixture(json!([
+        {
+            "recorded_on": "2026-02-27",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 3,
+            "failed": 1,
+            "pass_rate": 0.75
+        },
+        {
+            "recorded_on": "2026-02-28",
+            "suite": EXPECTED_SUITE,
+            "total": u64::MAX,
+            "passed": u64::MAX,
+            "failed": 1,
+            "pass_rate": 1.0
+        }
+    ]));
+
+    let err = validate_time_series_history(&history)
+        .expect_err("overflowed passed + failed must fail validation");
+    assert!(err.contains("overflows while computing passed + failed"));
+}
+
+#[test]
 fn validate_latest_entry_matches_scorecard_rejects_value_drift() {
     let history = history_fixture(json!([
         {
@@ -499,6 +525,39 @@ fn validate_latest_entry_matches_scorecard_rejects_value_drift() {
     let err = validate_latest_entry_matches_scorecard(&history, &scorecard)
         .expect_err("latest-entry scorecard mismatch must fail");
     assert!(err.contains("must match scorecard"));
+}
+
+#[test]
+fn validate_latest_entry_matches_scorecard_rejects_pass_rate_drift() {
+    let history = history_fixture(json!([
+        {
+            "recorded_on": "2026-02-27",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 3,
+            "failed": 1,
+            "pass_rate": 0.75
+        },
+        {
+            "recorded_on": "2026-02-28",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 4,
+            "failed": 0,
+            "pass_rate": 1.0
+        }
+    ]));
+    let scorecard = json!({
+        "suite": EXPECTED_SUITE,
+        "total": 4,
+        "passed": 4,
+        "failed": 0,
+        "pass_rate": 0.99
+    });
+
+    let err = validate_latest_entry_matches_scorecard(&history, &scorecard)
+        .expect_err("latest-entry pass-rate mismatch must fail");
+    assert!(err.contains("pass_rate must match scorecard"));
 }
 
 #[test]
@@ -555,6 +614,14 @@ fn checked_in_metric_timeline_has_multiple_entries_and_docs_tracking_contract() 
     assert!(
         docs.contains("append a new entry"),
         "docs/conformance.md must preserve append-only guidance for timeline updates"
+    );
+    assert!(
+        docs.contains("YYYY-MM-DD"),
+        "docs/conformance.md must preserve the recorded_on date format guidance"
+    );
+    assert!(
+        docs.contains("strictly increasing"),
+        "docs/conformance.md must preserve strict chronology guidance for timeline updates"
     );
     assert!(
         docs.contains("Do not edit or remove prior entries"),
