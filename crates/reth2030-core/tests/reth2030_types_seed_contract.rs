@@ -13,6 +13,15 @@ const REQUIRED_PACKAGE_FIELDS: [&str; 3] = [
     "description = \"Execution-layer primitive types for reth2030\"",
     "license = \"Apache-2.0\"",
 ];
+const REQUIRED_STRICT_SCHEMA_STRUCTS: [&str; 7] = [
+    "LegacyTx",
+    "Eip1559Tx",
+    "BlobTx",
+    "LogEntry",
+    "Receipt",
+    "Header",
+    "Block",
+];
 const REQUIRED_PUBLIC_SYMBOLS: [&str; 11] = [
     "Address",
     "Hash32",
@@ -26,6 +35,20 @@ const REQUIRED_PUBLIC_SYMBOLS: [&str; 11] = [
     "ValidationError",
     "Block",
 ];
+const REQUIRED_EDGE_CASE_UNIT_TESTS: [&str; 12] = [
+    "transaction_u128_fields_accept_max_string_inputs_for_all_variants",
+    "transaction_u128_fields_reject_overflow_string_inputs",
+    "transaction_u128_fields_reject_negative_integer",
+    "transaction_u128_fields_reject_non_numeric_types",
+    "transaction_deserialization_rejects_unknown_fields_for_all_variants",
+    "transaction_deserialization_rejects_invalid_address_lengths",
+    "transaction_deserialization_rejects_invalid_blob_hash_lengths",
+    "block_validate_allows_empty_receipts_for_pre_execution_blocks",
+    "block_validate_accepts_equal_cumulative_gas_between_receipts",
+    "block_validate_rejects_non_monotonic_receipt_cumulative_gas",
+    "block_validate_rejects_receipt_final_gas_below_header_gas_used",
+    "block_validate_propagates_header_error_before_receipt_mismatch",
+];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -35,6 +58,10 @@ fn read_repo_file(relative_path: &str) -> String {
     let path = repo_root().join(relative_path);
     fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("failed reading {}: {err}", path.display()))
+}
+
+fn normalize_whitespace(input: &str) -> String {
+    input.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn extract_public_symbols(source: &str) -> BTreeSet<String> {
@@ -62,6 +89,46 @@ fn extract_public_symbols(source: &str) -> BTreeSet<String> {
     }
 
     symbols
+}
+
+fn extract_test_function_names(source: &str) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    let mut awaiting_test_fn = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("#[test]") {
+            awaiting_test_fn = true;
+            continue;
+        }
+
+        if !awaiting_test_fn {
+            continue;
+        }
+
+        if trimmed.starts_with("#[") || trimmed.is_empty() {
+            continue;
+        }
+
+        let Some(rest) = trimmed.strip_prefix("fn ") else {
+            awaiting_test_fn = false;
+            continue;
+        };
+
+        let function_name: String = rest
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+            .collect();
+
+        if !function_name.is_empty() {
+            names.insert(function_name);
+        }
+
+        awaiting_test_fn = false;
+    }
+
+    names
 }
 
 #[test]
@@ -102,6 +169,39 @@ pub struct Header {
 
     let symbols = extract_public_symbols(source);
     assert_eq!(symbols, BTreeSet::from(["Header".to_owned()]));
+}
+
+#[test]
+fn extract_test_function_names_handles_additional_attributes() {
+    let source = r#"
+#[test]
+#[cfg(unix)]
+fn unix_only_test() {}
+
+#[test]
+fn plain_test() {}
+"#;
+
+    let names = extract_test_function_names(source);
+    assert_eq!(
+        names,
+        BTreeSet::from(["plain_test".to_owned(), "unix_only_test".to_owned()])
+    );
+}
+
+#[test]
+fn extract_test_function_names_ignores_non_function_declarations() {
+    let source = r#"
+#[test]
+const NOT_A_TEST: usize = 1;
+fn should_not_be_collected() {}
+
+#[test]
+fn collected_test() {}
+"#;
+
+    let names = extract_test_function_names(source);
+    assert_eq!(names, BTreeSet::from(["collected_test".to_owned()]));
 }
 
 #[test]
@@ -153,6 +253,33 @@ fn reth2030_types_exports_expected_primitive_symbols_and_variants() {
         assert!(
             lib.contains(variant),
             "Transaction enum must include `{variant}`"
+        );
+    }
+}
+
+#[test]
+fn reth2030_types_lib_keeps_fail_closed_serde_boundaries() {
+    let lib = read_repo_file("crates/reth2030-types/src/lib.rs");
+    let normalized = normalize_whitespace(&lib);
+
+    for struct_name in REQUIRED_STRICT_SCHEMA_STRUCTS {
+        let snippet = format!("#[serde(deny_unknown_fields)] pub struct {struct_name}");
+        assert!(
+            normalized.contains(&snippet),
+            "reth2030-types `{struct_name}` must keep `#[serde(deny_unknown_fields)]`"
+        );
+    }
+}
+
+#[test]
+fn reth2030_types_lib_keeps_edge_case_unit_coverage_contract() {
+    let lib = read_repo_file("crates/reth2030-types/src/lib.rs");
+    let discovered_tests = extract_test_function_names(&lib);
+
+    for required_test in REQUIRED_EDGE_CASE_UNIT_TESTS {
+        assert!(
+            discovered_tests.contains(required_test),
+            "crates/reth2030-types/src/lib.rs test module must include `{required_test}`"
         );
     }
 }

@@ -250,3 +250,5 @@ Reflection cadence:
 - Learned pitfall: deterministic transition coverage must validate both error equality and post-state snapshot parity; success-only replay assertions can miss fail-closed drift.
 - Added `engine_api_namespace_seed_contract` tests to lock the checked Phase 3 task for Engine API namespace/JWT placeholders (`TODO.md` checkmark + `/engine` auth wiring + engine capability/placeholder method contract + auth edge-case coverage contract).
 - Learned pitfall: source-level constant-array contract parsers must anchor on initializer `=` before scanning `[...]`; starting at the type annotation bracket (`[&str; N]`) can silently drop first entries.
+- Hardened `reth2030_types_seed_contract` to lock fail-closed serde boundaries on core primitive structs and require retained edge-case unit tests in `crates/reth2030-types/src/lib.rs`.
+- Learned workflow: when a crate-seed TODO item is already checked, strengthen its seed contract with test-presence/serde-boundary invariants rather than reworking the crate implementation.
