@@ -295,3 +295,5 @@ Reflection cadence:
 - Learned behavior: legacy contract-creation transactions (`to: None`) still debit sender balance and bump nonce but create no recipient account, so reordering against value transfers changes which recipient state is materialized before fail-closed halt.
 - Hardened `InMemoryState` deterministic transition coverage for zero-value `apply_transaction` paths from missing senders, including follow-on fail-closed `apply_transactions` replay parity.
 - Learned behavior: a zero-value transaction from a missing sender is not a no-op in this scaffold; it materializes sender/recipient accounts (`sender.nonce = 1`) and that partial progress must remain deterministic when later transactions fail.
+- Hardened `reth2030-vectors` address parsing and fixture execution coverage to accept uppercase `0X`-prefixed addresses in addition to lowercase `0x`.
+- Learned pitfall: supporting uppercase hex prefixes for numeric fields is insufficient if address parsing remains lowercase-only; fixture compatibility can regress unless both parser paths are kept aligned.

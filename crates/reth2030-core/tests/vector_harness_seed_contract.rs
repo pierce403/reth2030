@@ -27,7 +27,12 @@ const REQUIRED_HARNESS_SOURCE_FRAGMENTS: [&str; 13] = [
     "compare_with_baseline(\"scorecard\", &args.baseline_scorecard, &scorecard_json)?;",
     "compare_with_baseline(\"snapshot\", &args.baseline_snapshot, &snapshot_json)?;",
 ];
-const REQUIRED_HARNESS_EDGE_CASE_TESTS: [&str; 12] = [
+const REQUIRED_HARNESS_ADDRESS_PARSE_FRAGMENTS: [&str; 2] = [
+    "fn parse_address(input: &str) -> Result<[u8; 20], String>",
+    ".or_else(|| input.strip_prefix(\"0X\"))",
+];
+const REQUIRED_HARNESS_EDGE_CASE_TESTS: [&str; 14] = [
+    "parse_address_accepts_uppercase_prefix",
     "parse_u128_accepts_decimal_and_hex",
     "parse_u128_rejects_invalid_values",
     "load_fixtures_recurses_into_nested_directories",
@@ -36,6 +41,7 @@ const REQUIRED_HARNESS_EDGE_CASE_TESTS: [&str; 12] = [
     "load_fixtures_rejects_symlinked_fixture_file",
     "load_fixtures_rejects_symlinked_fixture_directory",
     "execute_fixture_accepts_hex_numeric_fields",
+    "execute_fixture_accepts_uppercase_prefixed_addresses",
     "execute_fixture_flags_unexpected_post_state_accounts",
     "execute_fixture_rejects_duplicate_expected_balances",
     "compare_with_baseline_reports_line_level_diff",
@@ -168,6 +174,13 @@ fn vectors_harness_main_keeps_fixture_execution_pipeline_wiring() {
         assert!(
             normalized.contains(required_fragment),
             "crates/reth2030-vectors/src/main.rs must include `{required_fragment}`"
+        );
+    }
+
+    for required_fragment in REQUIRED_HARNESS_ADDRESS_PARSE_FRAGMENTS {
+        assert!(
+            normalized.contains(required_fragment),
+            "address parser wiring must include `{required_fragment}`"
         );
     }
 

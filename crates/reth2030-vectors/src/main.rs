@@ -395,7 +395,10 @@ fn parse_u128(value: &str) -> Result<u128, String> {
 }
 
 fn parse_address(input: &str) -> Result<[u8; 20], String> {
-    let hex = input.strip_prefix("0x").unwrap_or(input);
+    let hex = input
+        .strip_prefix("0x")
+        .or_else(|| input.strip_prefix("0X"))
+        .unwrap_or(input);
     if hex.len() != 40 {
         return Err(format!("address must have 40 hex chars: {}", input));
     }
@@ -573,6 +576,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_address_accepts_uppercase_prefix() {
+        let address = parse_address("0XAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+            .expect("parse uppercase prefixed address");
+        assert_eq!(address, [0xaa; 20]);
+    }
+
+    #[test]
     fn parse_u128_accepts_decimal_and_hex() {
         assert_eq!(parse_u128("42").expect("decimal"), 42);
         assert_eq!(parse_u128("0x2a").expect("hex"), 42);
@@ -729,6 +739,40 @@ mod tests {
                     FixtureBalance {
                         address: "0x2222222222222222222222222222222222222222".to_string(),
                         balance: "0xa".to_string(),
+                    },
+                ],
+            },
+        };
+
+        let result = execute_fixture(&fixture).expect("fixture execution");
+        assert!(result.passed);
+        assert!(result.actual_success);
+    }
+
+    #[test]
+    fn execute_fixture_accepts_uppercase_prefixed_addresses() {
+        let fixture = Fixture {
+            name: "uppercase-prefixed-addresses".to_string(),
+            initial_accounts: vec![FixtureBalance {
+                address: "0X1111111111111111111111111111111111111111".to_string(),
+                balance: "30".to_string(),
+            }],
+            transactions: vec![FixtureTx {
+                from: "0X1111111111111111111111111111111111111111".to_string(),
+                to: Some("0X2222222222222222222222222222222222222222".to_string()),
+                nonce: 0,
+                value: "10".to_string(),
+            }],
+            expected: FixtureExpected {
+                success: true,
+                balances: vec![
+                    FixtureBalance {
+                        address: "0X1111111111111111111111111111111111111111".to_string(),
+                        balance: "20".to_string(),
+                    },
+                    FixtureBalance {
+                        address: "0X2222222222222222222222222222222222222222".to_string(),
+                        balance: "10".to_string(),
                     },
                 ],
             },
