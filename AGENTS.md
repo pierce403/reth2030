@@ -293,3 +293,5 @@ Reflection cadence:
 - Learned pitfall: timeline arithmetic/date invariants can still pass while metric documentation drifts; fail closed on missing or underspecified `conformance-history` descriptions.
 - Hardened `execution_ordering` integration coverage with reordered intrinsic-gas failures (`tx_index` 0 vs 1) and contract-creation/transfer ordering to lock partial-progress differences.
 - Learned behavior: legacy contract-creation transactions (`to: None`) still debit sender balance and bump nonce but create no recipient account, so reordering against value transfers changes which recipient state is materialized before fail-closed halt.
+- Hardened `InMemoryState` deterministic transition coverage for zero-value `apply_transaction` paths from missing senders, including follow-on fail-closed `apply_transactions` replay parity.
+- Learned behavior: a zero-value transaction from a missing sender is not a no-op in this scaffold; it materializes sender/recipient accounts (`sender.nonce = 1`) and that partial progress must remain deterministic when later transactions fail.

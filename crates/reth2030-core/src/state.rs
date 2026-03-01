@@ -724,6 +724,92 @@ mod tests {
     }
 
     #[test]
+    fn apply_transaction_zero_value_from_missing_sender_creates_accounts_deterministically() {
+        let tx = Transaction::Legacy(LegacyTx {
+            nonce: 0,
+            from: addr(0x0a),
+            to: Some(addr(0x0b)),
+            gas_limit: 21_000,
+            gas_price: 1,
+            value: 0,
+            data: Vec::new(),
+        });
+
+        let mut state_a = InMemoryState::new();
+        let mut state_b = InMemoryState::new();
+
+        state_a.apply_transaction(&tx).expect("first run");
+        state_b.apply_transaction(&tx).expect("second run");
+
+        assert_eq!(state_a.snapshot(), state_b.snapshot());
+        assert_eq!(state_a.snapshot().len(), 2);
+
+        let sender = state_a.get_account(&addr(0x0a)).expect("sender account");
+        let recipient = state_a.get_account(&addr(0x0b)).expect("recipient account");
+        assert_eq!(sender.balance, 0);
+        assert_eq!(sender.nonce, 1);
+        assert_eq!(recipient.balance, 0);
+        assert_eq!(recipient.nonce, 0);
+    }
+
+    #[test]
+    fn apply_transactions_zero_value_bootstrap_then_failure_is_deterministic() {
+        let txs = vec![
+            Transaction::Blob(BlobTx {
+                nonce: 0,
+                from: addr(0x0a),
+                to: Some(addr(0x0b)),
+                gas_limit: 21_000,
+                max_fee_per_gas: 3,
+                max_priority_fee_per_gas: 1,
+                max_fee_per_blob_gas: 2,
+                value: 0,
+                data: vec![0x01, 0x02],
+                blob_versioned_hashes: vec![[0x33; 32]],
+            }),
+            Transaction::Eip1559(Eip1559Tx {
+                nonce: 1,
+                from: addr(0x0a),
+                to: Some(addr(0x0c)),
+                gas_limit: 21_000,
+                max_fee_per_gas: 2,
+                max_priority_fee_per_gas: 1,
+                value: 1,
+                data: vec![0x03],
+            }),
+        ];
+
+        let mut state_a = InMemoryState::new();
+        let mut state_b = InMemoryState::new();
+
+        let err_a = state_a
+            .apply_transactions(&txs)
+            .expect_err("first run must fail");
+        let err_b = state_b
+            .apply_transactions(&txs)
+            .expect_err("second run must fail");
+
+        assert_eq!(
+            err_a,
+            StateError::InsufficientBalance {
+                address: addr(0x0a),
+                available: 0,
+                requested: 1,
+            }
+        );
+        assert_eq!(err_a, err_b);
+        assert_eq!(state_a.snapshot(), state_b.snapshot());
+
+        let sender = state_a.get_account(&addr(0x0a)).expect("sender account");
+        let first_recipient = state_a.get_account(&addr(0x0b)).expect("first recipient");
+        assert_eq!(sender.balance, 0);
+        assert_eq!(sender.nonce, 1);
+        assert_eq!(first_recipient.balance, 0);
+        assert_eq!(first_recipient.nonce, 0);
+        assert_eq!(state_a.get_account(&addr(0x0c)), None);
+    }
+
+    #[test]
     fn apply_transaction_nonce_and_recipient_balance_saturation_is_deterministic() {
         let tx = Transaction::Legacy(LegacyTx {
             nonce: 0,
