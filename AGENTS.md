@@ -248,3 +248,5 @@ Reflection cadence:
 - Added `state_backend_determinism_seed_contract` tests to lock the checked Phase 1 acceptance criterion (`TODO.md` checkmark + deterministic transition test-presence contract + replay parity on success and fail-closed paths).
 - Hardened `InMemoryState` deterministic transition coverage with replay edge cases for partial-progress failure, contract-creation sender-only mutation, and interleaved storage writes.
 - Learned pitfall: deterministic transition coverage must validate both error equality and post-state snapshot parity; success-only replay assertions can miss fail-closed drift.
+- Added `engine_api_namespace_seed_contract` tests to lock the checked Phase 3 task for Engine API namespace/JWT placeholders (`TODO.md` checkmark + `/engine` auth wiring + engine capability/placeholder method contract + auth edge-case coverage contract).
+- Learned pitfall: source-level constant-array contract parsers must anchor on initializer `=` before scanning `[...]`; starting at the type annotation bracket (`[&str; N]`) can silently drop first entries.
