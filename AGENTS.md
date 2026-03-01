@@ -277,3 +277,5 @@ Reflection cadence:
 - Hardened `mock_sync_seed_contract` to require this same-peer reconnect-in-place runtime test so the checked mocked-sync seed acceptance cannot silently regress.
 - Added explicit `SimpleExecutionEngine::no_op()` constructor and hardened `scaffold_engine_seed_contract` to require it as the canonical no-op scaffold mode.
 - Learned behavior: `SimpleExecutionEngine::no_op()` still applies successful earlier transitions and then fails closed at the first state error without creating the failing transaction recipient.
+- Hardened `architecture_notes_contract` and `architecture_notes_seed_contract` to fail closed on symlinked ADR directory paths/entries and to require dedicated symlink-edge coverage tests.
+- Learned pitfall: `Path::is_file()`/`is_dir()` checks alone can mask symlinked ADR content; use `fs::symlink_metadata` and explicit `file_type().is_symlink()` guards for strict ADR-directory integrity.

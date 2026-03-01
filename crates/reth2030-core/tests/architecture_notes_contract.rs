@@ -74,6 +74,15 @@ fn validate_adr_sequence(numbers: &[u32]) -> Result<(), String> {
     Ok(())
 }
 
+fn ensure_not_symlink(path: &Path, label: &str) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|err| format!("failed reading metadata for {}: {err}", path.display()))?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!("{label} must not be a symlink: {}", path.display()));
+    }
+    Ok(())
+}
+
 fn parse_single_metadata_value(content: &str, key: &str) -> Result<String, String> {
     let prefix = format!("- {key}:");
     let mut values = content
@@ -227,6 +236,37 @@ fn assert_adr_content_contract(path: &Path, number: u32, content: &str) {
     });
 }
 
+struct TempDirGuard {
+    path: PathBuf,
+}
+
+impl TempDirGuard {
+    fn new(prefix: &str) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after UNIX_EPOCH")
+            .as_nanos();
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "reth2030-architecture-notes-contract-{prefix}-{}-{now}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path)
+            .unwrap_or_else(|err| panic!("failed creating temp dir {}: {err}", path.display()));
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 #[test]
 fn parse_adr_filename_accepts_only_strict_adr_convention() {
     assert_eq!(parse_adr_filename("ADR-0001-initial-scope.md"), Some(1));
@@ -316,6 +356,56 @@ fn is_valid_iso_date_enforces_calendar_boundaries() {
     ] {
         assert!(!is_valid_iso_date(invalid), "{invalid} should be invalid");
     }
+}
+
+#[test]
+fn ensure_not_symlink_accepts_regular_paths_and_rejects_missing_path() {
+    let temp_dir = TempDirGuard::new("regular");
+    let regular_file = temp_dir.path().join("note.md");
+    fs::write(&regular_file, "content")
+        .unwrap_or_else(|err| panic!("failed writing {}: {err}", regular_file.display()));
+
+    assert_eq!(
+        ensure_not_symlink(temp_dir.path(), "temp directory"),
+        Ok(())
+    );
+    assert_eq!(ensure_not_symlink(&regular_file, "temp file"), Ok(()));
+
+    let missing_path = temp_dir.path().join("missing.md");
+    let missing_error = ensure_not_symlink(&missing_path, "missing path")
+        .expect_err("missing path must return metadata error");
+    assert!(
+        missing_error.contains("failed reading metadata for"),
+        "unexpected error message: {missing_error}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn ensure_not_symlink_rejects_symlink_path() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = TempDirGuard::new("symlink");
+    let target = temp_dir.path().join("target.md");
+    fs::write(&target, "content")
+        .unwrap_or_else(|err| panic!("failed writing {}: {err}", target.display()));
+
+    let symlink_path = temp_dir.path().join("symlink.md");
+    symlink(&target, &symlink_path).unwrap_or_else(|err| {
+        panic!(
+            "failed creating symlink {} -> {}: {err}",
+            symlink_path.display(),
+            target.display()
+        )
+    });
+
+    assert_eq!(
+        ensure_not_symlink(&symlink_path, "symlink entry"),
+        Err(format!(
+            "symlink entry must not be a symlink: {}",
+            symlink_path.display()
+        ))
+    );
 }
 
 #[test]
@@ -419,6 +509,8 @@ fn architecture_notes_directory_contains_well_formed_ordered_adrs() {
         "{} must exist as a directory for ADR documents",
         dir.display()
     );
+    ensure_not_symlink(&dir, "architecture notes directory")
+        .unwrap_or_else(|err| panic!("{}: {err}", dir.display()));
 
     let entries =
         fs::read_dir(&dir).unwrap_or_else(|err| panic!("failed reading {}: {err}", dir.display()));
@@ -429,6 +521,8 @@ fn architecture_notes_directory_contains_well_formed_ordered_adrs() {
     for entry in entries {
         let entry = entry.unwrap_or_else(|err| panic!("failed reading entry: {err}"));
         let path = entry.path();
+        ensure_not_symlink(&path, "ADR directory entry")
+            .unwrap_or_else(|err| panic!("{}: {err}", dir.display()));
         if !path.is_file() {
             continue;
         }

@@ -6,10 +6,12 @@ use std::{
 
 const TODO_SEED_TASK_LINE: &str = "- [x] Add architecture-notes directory for ADR-style decisions.";
 const BOOTSTRAP_ADR_FILE: &str = "ADR-0001-initial-workspace-and-poc-scope.md";
-const REQUIRED_ADR_CONTRACT_TESTS: [&str; 6] = [
+const REQUIRED_ADR_CONTRACT_TESTS: [&str; 8] = [
     "parse_adr_filename_accepts_only_strict_adr_convention",
     "validate_adr_sequence_rejects_empty_duplicates_and_gaps",
     "is_valid_iso_date_enforces_calendar_boundaries",
+    "ensure_not_symlink_accepts_regular_paths_and_rejects_missing_path",
+    "ensure_not_symlink_rejects_symlink_path",
     "validate_required_sections_rejects_missing_duplicate_order_and_empty_bodies",
     "validate_adr_content_contract_rejects_invalid_title_status_and_date",
     "architecture_notes_directory_contains_well_formed_ordered_adrs",
