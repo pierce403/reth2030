@@ -362,6 +362,114 @@ mod tests {
     }
 
     #[test]
+    fn mock_sync_loop_retries_fail_closed_when_peer_slot_is_taken_and_recovers_when_freed() {
+        let mut runtime = runtime_with_max_peers(1);
+        runtime.start().expect("runtime should start");
+
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(2), "127.0.0.1:30304"))
+            .expect("saturating peer should connect");
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 1);
+
+        for _ in 0..2 {
+            let err = runtime
+                .run_mock_sync_once()
+                .expect_err("mock sync should fail while another peer occupies the only slot");
+            assert_eq!(
+                err,
+                NodeRuntimeError::PeerManager(PeerManagerError::MaxPeersReached { max_peers: 1 })
+            );
+        }
+
+        assert_eq!(runtime.lifecycle, RuntimeState::Running);
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 1);
+        assert_eq!(
+            runtime.sync.peer_manager.connected_peers(),
+            vec![PeerInfo::new(mock_peer_id(2), "127.0.0.1:30304")]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(2)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 2, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (1, 0, 2, 1));
+
+        assert!(
+            runtime.sync.disconnect_peer(&mock_peer_id(2)),
+            "pre-connected peer should disconnect to free a slot"
+        );
+
+        runtime
+            .run_mock_sync_once()
+            .expect("mock sync should succeed once a peer slot is freed");
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 1);
+        assert_eq!(
+            runtime.sync.peer_manager.connected_peers(),
+            vec![PeerInfo::new(mock_peer_id(1), "127.0.0.1:30303")]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(2)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(2)),
+                PeerEvent::Connected(mock_peer_id(1)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 2, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+                expected_peer_log("disconnected", 2, 0),
+                expected_peer_log("connected", 1, 1),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 1, 2, 1));
+
+        runtime.shutdown().expect("runtime should shut down");
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(2)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(2)),
+                PeerEvent::Connected(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(1)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 2, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+                expected_peer_log("disconnected", 2, 0),
+                expected_peer_log("connected", 1, 1),
+                expected_peer_log("disconnected", 1, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 2, 2, 0));
+    }
+
+    #[test]
     fn runtime_rejects_invalid_lifecycle_transitions() {
         let mut runtime = runtime_with_max_peers(1);
 

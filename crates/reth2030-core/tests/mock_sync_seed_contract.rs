@@ -14,10 +14,11 @@ const REQUIRED_MAIN_SOURCE_SNIPPETS: [&str; 7] = [
     "let shutdown_result = self.shutdown();",
     "runtime.execute(cli.run_mock_sync)",
 ];
-const REQUIRED_RUNTIME_TESTS: [&str; 3] = [
+const REQUIRED_RUNTIME_TESTS: [&str; 4] = [
     "mock_sync_loop_runs_without_error",
     "mock_sync_loop_fails_closed_when_no_peer_slots_are_available",
     "mock_sync_loop_can_run_repeatedly_without_panicking",
+    "mock_sync_loop_retries_fail_closed_when_peer_slot_is_taken_and_recovers_when_freed",
 ];
 
 fn repo_root() -> PathBuf {
