@@ -261,3 +261,5 @@ Reflection cadence:
 - Learned pitfall: ordering tests that rely on state-level failure precedence must set explicit block gas limits; the default helper gas limit can trigger `GasLimitExceeded` before the intended balance failure path.
 - Hardened `reth2030-vectors` fixture discovery to fail closed on symlinked file/directory entries, preventing recursive link traversal and non-canonical fixture injection.
 - Learned pitfall: using `Path::is_dir()` alone in recursive fixture walkers follows symlinks; use `fs::symlink_metadata` + `file_type` checks to keep traversal deterministic and bounded.
+- Added `architecture_notes_seed_contract` tests to lock the checked Phase 0 ADR seed (`TODO.md` checkmark + `docs/architecture-notes` directory/bootstrap ADR + required ADR contract-test coverage).
+- Learned pitfall: ADR content contracts alone can miss seed drift if the TODO checkmark and bootstrap ADR anchor are not asserted together.
