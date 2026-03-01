@@ -325,3 +325,5 @@ Reflection cadence:
 - Learned pitfall: parsing `pub use ...::{self, ...}` re-exports naively can mis-document the symbol as literal `self`; carry path-segment context when extracting exported symbols from `syn::UseTree`.
 - Hardened `execution_determinism_seed_contract` with repeated-run metadata-variation coverage that isolates receipt-hash sensitivity across fee fields, payload bytes, blob-hash ordering, and `to: None` vs `to: Some(...)` destination shape.
 - Learned behavior: deterministic execution output depends on hashing tx metadata beyond state-transition fields; even zero-value transactions with identical state effects must keep distinct receipt hashes when metadata differs.
+- Hardened `execution_determinism_seed_contract` with repeated-run saturation-boundary coverage (`u64::MAX` nonce and near-`u128::MAX` balance paths) across mixed transaction variants.
+- Learned behavior: saturation-boundary execution remains deterministic across reruns while preserving untouched account metadata (`code`/`storage`) and fail-closed contract-creation recipient semantics.

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -567,6 +567,129 @@ fn repeated_execution_output_is_deterministic_for_hash_sensitive_metadata_variat
             .values()
             .all(|account| account.balance == 0),
         "zero-value metadata-variation transactions should keep balances at zero"
+    );
+}
+
+#[test]
+fn repeated_execution_output_is_deterministic_for_saturating_state_boundaries() {
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_transfer(addr(0xd1), addr(0xd2), 0, 21_000, 10),
+            mk_eip1559_transfer(
+                addr(0xd2),
+                addr(0xd3),
+                1,
+                21_000,
+                u128::MAX,
+                vec![0xaa, 0xbb],
+            ),
+            mk_blob_transfer(
+                addr(0xd3),
+                addr(0xd4),
+                0,
+                21_000,
+                2,
+                vec![0xcc],
+                vec![[0x10; 32], [0x20; 32]],
+            ),
+            mk_blob_contract_creation(addr(0xd1), 1, 21_000, 5, vec![0xdd], vec![[0x30; 32]]),
+        ],
+        84_000,
+    );
+
+    let mut initial_state = InMemoryState::new();
+    let mut sender_storage = BTreeMap::new();
+    sender_storage.insert([0x01; 32], [0x02; 32]);
+    let mut recipient_storage = BTreeMap::new();
+    recipient_storage.insert([0x03; 32], [0x04; 32]);
+
+    initial_state.upsert_account(
+        addr(0xd1),
+        Account {
+            nonce: u64::MAX,
+            balance: u128::MAX,
+            code: vec![0x11, 0x12],
+            storage: sender_storage,
+        },
+    );
+    initial_state.upsert_account(
+        addr(0xd2),
+        Account {
+            nonce: u64::MAX,
+            balance: u128::MAX - 5,
+            ..Account::default()
+        },
+    );
+    initial_state.upsert_account(
+        addr(0xd4),
+        Account {
+            nonce: 7,
+            balance: u128::MAX - 1,
+            code: vec![0x99],
+            storage: recipient_storage,
+        },
+    );
+
+    let engine = SimpleExecutionEngine::default();
+    let mut baseline_state = initial_state.clone();
+    let baseline_result = engine
+        .execute_block(&mut baseline_state, &block)
+        .expect("baseline saturation-boundary execution should succeed");
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..32 {
+        let mut run_state = initial_state.clone();
+        let run_result = engine
+            .execute_block(&mut run_state, &block)
+            .expect("repeated saturation-boundary execution should succeed");
+        assert_eq!(
+            run_result, baseline_result,
+            "run {run} produced non-deterministic execution output"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic post-state snapshot"
+        );
+    }
+
+    assert_eq!(baseline_result.total_gas_used, 84_000);
+    assert_eq!(baseline_result.tx_results.len(), 4);
+    assert_eq!(baseline_result.receipts.len(), 4);
+
+    let sender = baseline_snapshot
+        .get(&addr(0xd1))
+        .expect("sender should persist");
+    let intermediate = baseline_snapshot
+        .get(&addr(0xd2))
+        .expect("intermediate sender should persist");
+    let second_sender = baseline_snapshot
+        .get(&addr(0xd3))
+        .expect("second sender should be materialized");
+    let recipient = baseline_snapshot
+        .get(&addr(0xd4))
+        .expect("recipient should persist");
+
+    assert_eq!(sender.nonce, u64::MAX);
+    assert_eq!(sender.balance, u128::MAX - 15);
+    assert_eq!(sender.code, vec![0x11, 0x12]);
+    assert_eq!(sender.storage.get(&[0x01; 32]), Some(&[0x02; 32]));
+
+    assert_eq!(intermediate.nonce, u64::MAX);
+    assert_eq!(intermediate.balance, 0);
+
+    assert_eq!(second_sender.nonce, 1);
+    assert_eq!(second_sender.balance, u128::MAX - 2);
+
+    assert_eq!(recipient.nonce, 7);
+    assert_eq!(recipient.balance, u128::MAX);
+    assert_eq!(recipient.code, vec![0x99]);
+    assert_eq!(recipient.storage.get(&[0x03; 32]), Some(&[0x04; 32]));
+
+    assert_eq!(
+        baseline_snapshot.len(),
+        4,
+        "contract-creation transaction should not create a recipient account"
     );
 }
 
