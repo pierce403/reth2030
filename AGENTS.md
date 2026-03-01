@@ -327,3 +327,5 @@ Reflection cadence:
 - Learned behavior: deterministic execution output depends on hashing tx metadata beyond state-transition fields; even zero-value transactions with identical state effects must keep distinct receipt hashes when metadata differs.
 - Hardened `execution_determinism_seed_contract` with repeated-run saturation-boundary coverage (`u64::MAX` nonce and near-`u128::MAX` balance paths) across mixed transaction variants.
 - Learned behavior: saturation-boundary execution remains deterministic across reruns while preserving untouched account metadata (`code`/`storage`) and fail-closed contract-creation recipient semantics.
+- Hardened `reth2030_net_seed_contract` to require peer/session edge-case unit coverage for max-peer-vs-overflow precedence, event-buffer clearing semantics, and lifecycle metric saturation behavior.
+- Learned workflow: when a crate seed is already complete, strengthen the seed contract to lock newly added edge-case tests so future cleanup cannot silently narrow peer/session guarantees.

@@ -28,17 +28,23 @@ const REQUIRED_PEER_WIRING_SNIPPETS: [&str; 7] = [
     "fn allocate_session_id(&mut self) -> Result<u64, PeerManagerError>",
     ".checked_add(1)",
 ];
-const REQUIRED_PEER_UNIT_TESTS: [&str; 10] = [
+const REQUIRED_PEER_UNIT_TESTS: [&str; 16] = [
     "connect_assigns_incrementing_session_ids_and_reconnects_in_place",
     "reconnect_replaces_peer_address_and_rotates_session_id",
     "max_peers_zero_rejects_first_peer_and_keeps_state_empty",
     "max_peers_limit_applies_only_to_new_peer_ids",
+    "max_peers_rejection_takes_precedence_over_session_id_overflow_for_new_peer",
     "rejected_new_peer_does_not_consume_next_session_id",
     "disconnect_is_idempotent_and_clears_session_state",
     "connected_peers_are_returned_in_deterministic_peer_id_order",
     "connect_fails_closed_on_session_id_overflow",
     "reconnect_fails_closed_on_session_id_overflow_without_mutating_existing_session",
     "disconnecting_unknown_peer_does_not_emit_observability_signals",
+    "clearing_events_does_not_reset_logs_or_metrics",
+    "clearing_events_then_recording_new_events_preserves_cumulative_observability",
+    "connected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
+    "disconnected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
+    "rejected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
 ];
 
 fn repo_root() -> PathBuf {
