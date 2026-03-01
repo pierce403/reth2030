@@ -271,3 +271,5 @@ Reflection cadence:
 - Learned behavior: `apply_transaction` with a missing sender must fail closed without creating sender/recipient accounts, and replaying saturation boundaries (`nonce = u64::MAX`, recipient near `u128::MAX`) keeps deterministic snapshots.
 - Hardened `crate_api_docs_contract` to parse each crate `lib.rs` with `syn` and enforce exact parity between documented `## Public API` symbols and actual top-level public exports/re-exports.
 - Learned pitfall: hardcoded expected symbol lists in doc contracts can silently miss newly exported APIs; derive exports from syntax and fail closed on public glob re-exports (`pub use ...::*`) to keep coverage explicit.
+- Hardened `public_vector_ci_seed_contract` required-argument checks to parse command tokens and enforce canonical `vector-conformance` flag values exactly once (`--fixtures-dir`, `--baseline-scorecard`, `--baseline-snapshot`, `--out-dir`).
+- Learned pitfall: substring-only required-argument checks allow duplicate long-flag overrides (for example a second `--fixtures-dir`) that can silently redirect the suite while still satisfying naive containment assertions.

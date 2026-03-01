@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs, panic,
     path::{Path, PathBuf},
 };
@@ -13,6 +14,14 @@ const REQUIRED_VECTOR_JOB_ARGS: [&str; 5] = [
     "--baseline-scorecard vectors/baseline/scorecard.json",
     "--baseline-snapshot vectors/baseline/snapshot.json",
     "--out-dir artifacts/vectors",
+];
+const REQUIRED_VECTOR_COMMAND_PREFIX_TOKENS: [&str; 6] =
+    ["cargo", "run", "-p", "reth2030-vectors", "--locked", "--"];
+const REQUIRED_VECTOR_FLAG_VALUES: [(&str, &str); 4] = [
+    ("--fixtures-dir", "vectors/ethereum-state-tests/minimal"),
+    ("--baseline-scorecard", "vectors/baseline/scorecard.json"),
+    ("--baseline-snapshot", "vectors/baseline/snapshot.json"),
+    ("--out-dir", "artifacts/vectors"),
 ];
 const DISALLOWED_VECTOR_COMMAND_CONTROL_FRAGMENTS: [&str; 7] =
     ["||", "&&", "|", "&", ";", "`", "$("];
@@ -218,6 +227,55 @@ fn assert_fail_closed_vector_command(vector_command: &str) {
     }
 }
 
+fn assert_required_vector_job_arguments(vector_command: &str) {
+    let tokens: Vec<&str> = vector_command
+        .split_whitespace()
+        .filter(|token| *token != "\\")
+        .collect();
+    assert!(
+        tokens.starts_with(&REQUIRED_VECTOR_COMMAND_PREFIX_TOKENS),
+        "vector conformance command must start with the canonical cargo invocation"
+    );
+    assert!(
+        tokens.len() > REQUIRED_VECTOR_COMMAND_PREFIX_TOKENS.len(),
+        "vector conformance command must provide vector suite arguments"
+    );
+
+    let mut flag_values: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut cursor = REQUIRED_VECTOR_COMMAND_PREFIX_TOKENS.len();
+    while cursor < tokens.len() {
+        let flag = tokens[cursor];
+        assert!(
+            flag.starts_with("--"),
+            "vector conformance command arguments must be long flags: `{flag}`"
+        );
+        let value = tokens
+            .get(cursor + 1)
+            .unwrap_or_else(|| panic!("missing value for vector conformance argument `{flag}`"));
+        assert!(
+            !value.starts_with("--"),
+            "vector conformance argument `{flag}` must have an explicit value"
+        );
+        flag_values.entry(flag).or_default().push(*value);
+        cursor += 2;
+    }
+
+    for (required_flag, required_value) in REQUIRED_VECTOR_FLAG_VALUES {
+        let values = flag_values.get(required_flag).unwrap_or_else(|| {
+            panic!("vector conformance command must include `{required_flag} {required_value}`")
+        });
+        assert_eq!(
+            values.len(),
+            1,
+            "vector conformance command must define `{required_flag}` exactly once"
+        );
+        assert_eq!(
+            values[0], required_value,
+            "vector conformance command must use canonical value `{required_value}` for `{required_flag}`"
+        );
+    }
+}
+
 fn contains_shell_word(command: &str, word: &str) -> bool {
     command
         .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
@@ -237,6 +295,22 @@ fn assert_command_validation_fails(command: &str) {
     assert!(
         result.is_err(),
         "expected command validation to fail, but it passed: `{command}`"
+    );
+}
+
+fn assert_required_argument_validation_passes(command: &str) {
+    let result = panic::catch_unwind(|| assert_required_vector_job_arguments(command));
+    assert!(
+        result.is_ok(),
+        "expected required argument validation to pass, but it failed: `{command}`"
+    );
+}
+
+fn assert_required_argument_validation_fails(command: &str) {
+    let result = panic::catch_unwind(|| assert_required_vector_job_arguments(command));
+    assert!(
+        result.is_err(),
+        "expected required argument validation to fail, but it passed: `{command}`"
     );
 }
 
@@ -432,6 +506,7 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
         );
     }
     assert_fail_closed_vector_command(vector_command);
+    assert_required_vector_job_arguments(vector_command);
 }
 
 #[test]
@@ -491,4 +566,45 @@ fn vector_command_guard_rejects_pipeline_masking_fragment() {
 fn vector_command_guard_rejects_background_masking_fragment() {
     let command = "cargo run -p reth2030-vectors --locked -- --fixtures-dir vectors/ethereum-state-tests/minimal &";
     assert_command_validation_fails(command);
+}
+
+#[test]
+fn vector_required_argument_contract_accepts_canonical_command() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+--fixtures-dir vectors/ethereum-state-tests/minimal \
+--baseline-scorecard vectors/baseline/scorecard.json \
+--baseline-snapshot vectors/baseline/snapshot.json \
+--out-dir artifacts/vectors";
+    assert_required_argument_validation_passes(command);
+}
+
+#[test]
+fn vector_required_argument_contract_rejects_duplicate_required_flag() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+--fixtures-dir vectors/ethereum-state-tests/minimal \
+--fixtures-dir vectors/ethereum-state-tests/other \
+--baseline-scorecard vectors/baseline/scorecard.json \
+--baseline-snapshot vectors/baseline/snapshot.json \
+--out-dir artifacts/vectors";
+    assert_required_argument_validation_fails(command);
+}
+
+#[test]
+fn vector_required_argument_contract_rejects_missing_required_flag_value() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+--fixtures-dir \
+--baseline-scorecard vectors/baseline/scorecard.json \
+--baseline-snapshot vectors/baseline/snapshot.json \
+--out-dir artifacts/vectors";
+    assert_required_argument_validation_fails(command);
+}
+
+#[test]
+fn vector_required_argument_contract_rejects_non_canonical_required_value() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+--fixtures-dir vectors/ethereum-state-tests/minimal \
+--baseline-scorecard vectors/baseline/scorecard.json \
+--baseline-snapshot vectors/baseline/snapshot.json \
+--out-dir artifacts/vectors-alt";
+    assert_required_argument_validation_fails(command);
 }
