@@ -235,3 +235,5 @@ Reflection cadence:
 - Learned pitfall: state-focused engine contract tests must use the `StateStore` surface (`get_account`/`upsert_account`) and account for `Account::storage` in initializers to match current core APIs.
 - Hardened `conformance_metric_seed_contract` with arithmetic edge coverage so history entries fail closed when `passed + failed` overflows `u64`.
 - Learned pitfall: scorecard/history mismatch tests should isolate the `pass_rate` comparison path directly; otherwise field-level drift can mask regressions in the dedicated pass-rate guard.
+- Hardened `public_vector_ci_seed_contract` to enforce fail-closed vector command structure (single cargo invocation, argument-only continuations, and disallowed shell control/masking fragments) plus strict `upload-artifact` uniqueness/`if: always()` guarantees.
+- Learned pitfall: naive shell-keyword substring guards (for example `fi`) can false-positive against valid vector arguments like `--fixtures-dir`; prefer boundary-aware or contextual shell-fragment checks.

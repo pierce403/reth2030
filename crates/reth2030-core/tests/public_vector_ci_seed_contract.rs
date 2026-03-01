@@ -14,6 +14,24 @@ const REQUIRED_VECTOR_JOB_ARGS: [&str; 5] = [
     "--baseline-snapshot vectors/baseline/snapshot.json",
     "--out-dir artifacts/vectors",
 ];
+const DISALLOWED_VECTOR_COMMAND_FRAGMENTS: [&str; 16] = [
+    "||",
+    "&&",
+    ";",
+    "`",
+    "$(",
+    "set +e",
+    "set +o errexit",
+    "set +o pipefail",
+    "trap ",
+    "if ",
+    "then",
+    "while ",
+    "for ",
+    "until ",
+    "case ",
+    "exit 0",
+];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -87,6 +105,14 @@ fn count_steps_by_name(steps: &Sequence, name: &str) -> usize {
         .count()
 }
 
+fn count_steps_by_uses(steps: &Sequence, uses: &str) -> usize {
+    steps
+        .iter()
+        .map(|step| as_mapping(step, "job step"))
+        .filter(|step| map_get(step, "uses").and_then(Value::as_str) == Some(uses))
+        .count()
+}
+
 fn find_step_index_by_name(steps: &Sequence, name: &str) -> usize {
     steps
         .iter()
@@ -138,6 +164,56 @@ fn collect_json_files_recursive(path: &Path) -> Vec<PathBuf> {
     recurse(path, &mut files);
     files.sort();
     files
+}
+
+fn assert_fail_closed_vector_command(vector_command: &str) {
+    let non_empty_lines: Vec<&str> = vector_command
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert!(
+        !non_empty_lines.is_empty(),
+        "vector conformance command must not be empty"
+    );
+
+    let first_line = non_empty_lines[0];
+    assert!(
+        first_line.starts_with(REQUIRED_VECTOR_JOB_ARGS[0]),
+        "vector conformance command must start with `{}`",
+        REQUIRED_VECTOR_JOB_ARGS[0]
+    );
+    if non_empty_lines.len() > 1 {
+        assert!(
+            first_line.ends_with('\\'),
+            "multiline vector conformance command must keep continuation on the first line"
+        );
+    }
+
+    for (index, line) in non_empty_lines.iter().enumerate().skip(1) {
+        assert!(
+            line.starts_with("--"),
+            "vector conformance continuation lines must contain only argument flags: `{line}`"
+        );
+        if index < non_empty_lines.len() - 1 {
+            assert!(
+                line.ends_with('\\'),
+                "intermediate continuation lines must end with `\\`: `{line}`"
+            );
+        } else {
+            assert!(
+                !line.ends_with('\\'),
+                "final continuation line must not end with `\\`: `{line}`"
+            );
+        }
+    }
+
+    for disallowed_fragment in DISALLOWED_VECTOR_COMMAND_FRAGMENTS {
+        assert!(
+            !vector_command.contains(disallowed_fragment),
+            "vector conformance command must not contain shell control/masking fragment `{disallowed_fragment}`"
+        );
+    }
 }
 
 #[test]
@@ -281,6 +357,11 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
 
     let vector_step_index = find_step_index_by_name(steps, "Vector conformance");
     let upload_step_index = find_step_index_by_uses(steps, "actions/upload-artifact@v4");
+    assert_eq!(
+        count_steps_by_uses(steps, "actions/upload-artifact@v4"),
+        1,
+        "vector-conformance job must contain exactly one upload-artifact step"
+    );
     assert!(
         vector_step_index < upload_step_index,
         "Vector conformance step must execute before artifact upload"
@@ -294,6 +375,12 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
             assert!(
                 map_get(step, "if").is_none(),
                 "vector-conformance steps must not be conditionally gated"
+            );
+        } else {
+            assert_eq!(
+                map_get_required(step, "if", "upload-artifact step").as_str(),
+                Some("always()"),
+                "upload-artifact step must run with `if: always()` to preserve failure diagnostics"
             );
         }
         if let Some(continue_on_error) = map_get(step, "continue-on-error") {
@@ -316,12 +403,7 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
             "vector conformance command must include `{required_arg}`"
         );
     }
-    for disallowed_fragment in ["|| true", "||true", "set +e", "; true"] {
-        assert!(
-            !vector_command.contains(disallowed_fragment),
-            "vector conformance command must not mask failures with `{disallowed_fragment}`"
-        );
-    }
+    assert_fail_closed_vector_command(vector_command);
 }
 
 #[test]
