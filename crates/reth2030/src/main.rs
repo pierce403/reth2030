@@ -782,6 +782,57 @@ mod tests {
     }
 
     #[test]
+    fn runtime_execute_with_mock_sync_failure_disconnects_preexisting_peers_on_shutdown() {
+        let mut runtime = runtime_with_max_peers(1);
+
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(2), "127.0.0.1:30304"))
+            .expect("pre-existing peer should connect before execute");
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 1);
+        assert_eq!(
+            runtime.sync.peer_manager.connected_peers(),
+            vec![PeerInfo::new(mock_peer_id(2), "127.0.0.1:30304")]
+        );
+
+        let err = runtime
+            .execute(true)
+            .expect_err("runtime execute should return mock sync max-peer failure");
+
+        assert_eq!(
+            err,
+            NodeRuntimeError::PeerManager(PeerManagerError::MaxPeersReached { max_peers: 1 })
+        );
+        assert_eq!(
+            runtime.lifecycle,
+            RuntimeState::Stopped,
+            "execute must still shut down after mock-sync failure with connected peers"
+        );
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.connected_peers(),
+            Vec::<PeerInfo>::new()
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(2)),
+                PeerEvent::RejectedMaxPeers(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(2)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 2, 1),
+                expected_peer_log("rejected_max_peers", 1, 1),
+                expected_peer_log("disconnected", 2, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (1, 1, 1, 0));
+    }
+
+    #[test]
     fn execute_fails_closed_when_called_while_running() {
         let mut runtime = runtime_with_max_peers(1);
         runtime.start().expect("runtime should start");
