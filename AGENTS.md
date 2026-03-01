@@ -291,3 +291,5 @@ Reflection cadence:
 - Learned behavior: in mixed-variant `apply_transactions` sequences, a failed sender debit leaves that sender nonce unchanged, halts subsequent transactions fail-closed, and preserves all earlier successful state progress deterministically across reruns.
 - Hardened `conformance_metric_seed_contract` to require non-empty conformance-history descriptions that reference the tracked fixture path (`vectors/ethereum-state-tests/minimal`).
 - Learned pitfall: timeline arithmetic/date invariants can still pass while metric documentation drifts; fail closed on missing or underspecified `conformance-history` descriptions.
+- Hardened `execution_ordering` integration coverage with reordered intrinsic-gas failures (`tx_index` 0 vs 1) and contract-creation/transfer ordering to lock partial-progress differences.
+- Learned behavior: legacy contract-creation transactions (`to: None`) still debit sender balance and bump nonce but create no recipient account, so reordering against value transfers changes which recipient state is materialized before fail-closed halt.

@@ -41,6 +41,24 @@ fn mk_legacy_with_payload(
     })
 }
 
+fn mk_legacy_contract_creation(
+    from: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+    data: Vec<u8>,
+) -> Transaction {
+    Transaction::Legacy(LegacyTx {
+        nonce,
+        from,
+        to: None,
+        gas_limit,
+        gas_price: 1,
+        value,
+        data,
+    })
+}
+
 fn mk_eip1559(
     from: [u8; 20],
     to: [u8; 20],
@@ -606,6 +624,164 @@ fn block_execution_halts_on_intrinsic_gas_failure_after_partial_progress() {
         state.get_account(&addr(0xe4)).is_none(),
         "transactions after intrinsic-gas failure must not execute"
     );
+}
+
+#[test]
+fn block_execution_order_controls_partial_progress_when_intrinsic_failure_is_reordered() {
+    let engine = SimpleExecutionEngine::default();
+    let tx_a = mk_legacy(addr(0xe5), addr(0xe6), 0, 6);
+    let tx_bad = mk_eip1559(addr(0xe5), addr(0xe7), 1, 20_999, 1, vec![0xaa]);
+    let tx_c = mk_blob(
+        addr(0xe5),
+        addr(0xe8),
+        2,
+        21_000,
+        2,
+        vec![0xbb, 0xcc],
+        vec![[0x44; 32]],
+    );
+
+    let block_fail_second =
+        block_with_txs_and_gas_limit(vec![tx_a.clone(), tx_bad.clone(), tx_c.clone()], 84_000);
+    let block_fail_first = block_with_txs_and_gas_limit(vec![tx_bad, tx_a, tx_c], 84_000);
+
+    let mut state_fail_second = InMemoryState::new();
+    state_fail_second.upsert_account(
+        addr(0xe5),
+        Account {
+            balance: 9,
+            ..Account::default()
+        },
+    );
+    let mut state_fail_first = state_fail_second.clone();
+
+    let err_second = engine
+        .execute_block(&mut state_fail_second, &block_fail_second)
+        .expect_err("reordered intrinsic-gas failure should halt execution at index 1");
+    let err_first = engine
+        .execute_block(&mut state_fail_first, &block_fail_first)
+        .expect_err("intrinsic-gas failure at index 0 should halt before any transfer");
+
+    assert_eq!(
+        err_second,
+        ExecutionError::TxGasLimitTooLow {
+            tx_gas_limit: 20_999,
+            required: 21_000,
+            tx_index: 1,
+        }
+    );
+    assert_eq!(
+        err_first,
+        ExecutionError::TxGasLimitTooLow {
+            tx_gas_limit: 20_999,
+            required: 21_000,
+            tx_index: 0,
+        }
+    );
+
+    let sender_second = state_fail_second
+        .get_account(&addr(0xe5))
+        .expect("sender should reflect only first transfer in fail-second order");
+    assert_eq!(sender_second.balance, 3);
+    assert_eq!(sender_second.nonce, 1);
+    let recipient_second = state_fail_second
+        .get_account(&addr(0xe6))
+        .expect("first transfer recipient should exist in fail-second order");
+    assert_eq!(recipient_second.balance, 6);
+    assert!(
+        state_fail_second.get_account(&addr(0xe7)).is_none(),
+        "intrinsic-gas failing transaction recipient must remain absent"
+    );
+    assert!(
+        state_fail_second.get_account(&addr(0xe8)).is_none(),
+        "transactions after intrinsic-gas failure must not execute"
+    );
+
+    let sender_first = state_fail_first
+        .get_account(&addr(0xe5))
+        .expect("sender should remain untouched when intrinsic failure is first");
+    assert_eq!(sender_first.balance, 9);
+    assert_eq!(sender_first.nonce, 0);
+    assert!(
+        state_fail_first.get_account(&addr(0xe6)).is_none(),
+        "no transfer recipient should be created when first transaction fails"
+    );
+    assert!(
+        state_fail_first.get_account(&addr(0xe7)).is_none(),
+        "intrinsic-gas failing transaction recipient must remain absent"
+    );
+    assert!(
+        state_fail_first.get_account(&addr(0xe8)).is_none(),
+        "transactions after first failure must not execute"
+    );
+}
+
+#[test]
+fn block_execution_order_controls_contract_creation_partial_progress() {
+    let engine = SimpleExecutionEngine::default();
+    let contract_create = mk_legacy_contract_creation(addr(0xe9), 0, 21_000, 4, vec![0xca, 0xfe]);
+    let transfer = mk_legacy(addr(0xe9), addr(0xea), 1, 7);
+
+    let block_create_then_transfer =
+        block_with_txs_and_gas_limit(vec![contract_create.clone(), transfer.clone()], 42_000);
+    let block_transfer_then_create =
+        block_with_txs_and_gas_limit(vec![transfer, contract_create], 42_000);
+
+    let mut state_create_then_transfer = InMemoryState::new();
+    state_create_then_transfer.upsert_account(
+        addr(0xe9),
+        Account {
+            balance: 10,
+            ..Account::default()
+        },
+    );
+    let mut state_transfer_then_create = state_create_then_transfer.clone();
+
+    let err_create_then_transfer = engine
+        .execute_block(&mut state_create_then_transfer, &block_create_then_transfer)
+        .expect_err("second transfer should fail after contract creation debits sender");
+    let err_transfer_then_create = engine
+        .execute_block(&mut state_transfer_then_create, &block_transfer_then_create)
+        .expect_err("second contract creation should fail after transfer debits sender");
+
+    assert_eq!(
+        err_create_then_transfer,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0xe9),
+            available: 6,
+            requested: 7,
+        })
+    );
+    assert_eq!(
+        err_transfer_then_create,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0xe9),
+            available: 3,
+            requested: 4,
+        })
+    );
+
+    let sender_a = state_create_then_transfer
+        .get_account(&addr(0xe9))
+        .expect("sender must remain present after first-order failure");
+    let sender_b = state_transfer_then_create
+        .get_account(&addr(0xe9))
+        .expect("sender must remain present after second-order failure");
+    assert_eq!(sender_a.balance, 6);
+    assert_eq!(sender_a.nonce, 1);
+    assert_eq!(sender_b.balance, 3);
+    assert_eq!(sender_b.nonce, 1);
+
+    assert!(
+        state_create_then_transfer
+            .get_account(&addr(0xea))
+            .is_none(),
+        "failing transfer recipient must remain absent when contract creation executes first"
+    );
+    let transfer_recipient = state_transfer_then_create
+        .get_account(&addr(0xea))
+        .expect("transfer recipient should exist when transfer executes first");
+    assert_eq!(transfer_recipient.balance, 7);
 }
 
 #[test]
