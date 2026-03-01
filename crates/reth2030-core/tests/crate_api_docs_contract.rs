@@ -3,6 +3,9 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use syn::{Item, UseTree, Visibility};
+
+const TODO_ACCEPTANCE_LINE: &str = "- [x] Public APIs are documented at crate-level.";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -87,7 +90,89 @@ fn parse_documented_symbols(section_lines: &[&str]) -> BTreeSet<String> {
     symbols
 }
 
-fn assert_crate_public_api_docs(relative_path: &str, expected_symbols: &[&str]) {
+fn is_public(vis: &Visibility) -> bool {
+    matches!(vis, Visibility::Public(_))
+}
+
+fn collect_public_use_tree_symbols(tree: &UseTree, symbols: &mut BTreeSet<String>) {
+    match tree {
+        UseTree::Name(name) => {
+            symbols.insert(name.ident.to_string());
+        }
+        UseTree::Rename(rename) => {
+            symbols.insert(rename.rename.to_string());
+        }
+        UseTree::Path(path) => collect_public_use_tree_symbols(&path.tree, symbols),
+        UseTree::Group(group) => {
+            for tree in &group.items {
+                collect_public_use_tree_symbols(tree, symbols);
+            }
+        }
+        UseTree::Glob(_) => {
+            panic!(
+                "public glob re-exports are not supported by this contract; list explicit symbols"
+            )
+        }
+    }
+}
+
+fn collect_public_item_symbols(item: Item, symbols: &mut BTreeSet<String>) {
+    match item {
+        Item::Const(item_const) if is_public(&item_const.vis) => {
+            symbols.insert(item_const.ident.to_string());
+        }
+        Item::Enum(item_enum) if is_public(&item_enum.vis) => {
+            symbols.insert(item_enum.ident.to_string());
+        }
+        Item::ExternCrate(item_extern_crate) if is_public(&item_extern_crate.vis) => {
+            let symbol = item_extern_crate
+                .rename
+                .as_ref()
+                .map(|(_, ident)| ident.to_string())
+                .unwrap_or_else(|| item_extern_crate.ident.to_string());
+            symbols.insert(symbol);
+        }
+        Item::Fn(item_fn) if is_public(&item_fn.vis) => {
+            symbols.insert(item_fn.sig.ident.to_string());
+        }
+        Item::Mod(item_mod) if is_public(&item_mod.vis) => {
+            symbols.insert(item_mod.ident.to_string());
+        }
+        Item::Static(item_static) if is_public(&item_static.vis) => {
+            symbols.insert(item_static.ident.to_string());
+        }
+        Item::Struct(item_struct) if is_public(&item_struct.vis) => {
+            symbols.insert(item_struct.ident.to_string());
+        }
+        Item::Trait(item_trait) if is_public(&item_trait.vis) => {
+            symbols.insert(item_trait.ident.to_string());
+        }
+        Item::TraitAlias(item_trait_alias) if is_public(&item_trait_alias.vis) => {
+            symbols.insert(item_trait_alias.ident.to_string());
+        }
+        Item::Type(item_type) if is_public(&item_type.vis) => {
+            symbols.insert(item_type.ident.to_string());
+        }
+        Item::Union(item_union) if is_public(&item_union.vis) => {
+            symbols.insert(item_union.ident.to_string());
+        }
+        Item::Use(item_use) if is_public(&item_use.vis) => {
+            collect_public_use_tree_symbols(&item_use.tree, symbols);
+        }
+        _ => {}
+    }
+}
+
+fn parse_public_symbols_from_source(source: &str) -> BTreeSet<String> {
+    let syntax = syn::parse_file(source).expect("crate source must parse as Rust");
+    let mut symbols = BTreeSet::new();
+    for item in syntax.items {
+        collect_public_item_symbols(item, &mut symbols);
+    }
+    symbols
+}
+
+fn assert_crate_public_api_docs(relative_path: &str) {
     let source = read_repo_file(relative_path);
     let doc_lines = crate_level_doc_lines(&source);
     assert!(
@@ -99,14 +184,21 @@ fn assert_crate_public_api_docs(relative_path: &str, expected_symbols: &[&str]) 
         .unwrap_or_else(|| panic!("{relative_path} must contain a `## Public API` section"));
     let documented_symbols = parse_documented_symbols(&section);
 
-    let expected: BTreeSet<String> = expected_symbols
-        .iter()
-        .map(|symbol| (*symbol).to_owned())
-        .collect();
+    let exported_symbols = parse_public_symbols_from_source(&source);
 
     assert_eq!(
-        documented_symbols, expected,
+        documented_symbols, exported_symbols,
         "{relative_path} `## Public API` symbols must match expected public API surface"
+    );
+}
+
+#[test]
+fn todo_marks_public_api_docs_acceptance_criterion_complete() {
+    let todo = read_repo_file("TODO.md");
+    assert!(
+        todo.lines()
+            .any(|line| line.trim() == TODO_ACCEPTANCE_LINE),
+        "TODO.md must keep the public API docs acceptance criterion checked: {TODO_ACCEPTANCE_LINE}"
     );
 }
 
@@ -169,83 +261,83 @@ fn parse_documented_symbols_ignores_non_bullets_and_malformed_entries() {
 }
 
 #[test]
-fn reth2030_core_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs(
-        "crates/reth2030-core/src/lib.rs",
-        &[
-            "Account",
-            "BlockExecutionResult",
-            "Chain",
-            "ExecutionEngine",
-            "ExecutionError",
-            "InMemoryState",
-            "NodeConfig",
-            "SimpleExecutionEngine",
-            "StateError",
-            "StateStore",
-            "StorageKey",
-            "StorageValue",
-            "TxExecutionResult",
-        ],
+fn parse_public_symbols_from_source_collects_public_root_items_and_reexports() {
+    let source = r#"
+pub use crate::alpha::{Foo, bar::Baz as Qux, nested::Zed};
+pub use crate::solo::Thing;
+pub struct Api;
+pub enum Kind {
+    A,
+}
+pub type Count = u64;
+pub trait Runner {}
+pub const LIMIT: u64 = 10;
+pub static ENABLED: bool = true;
+pub fn run() {}
+"#;
+
+    let symbols = parse_public_symbols_from_source(source);
+    assert_eq!(
+        symbols,
+        BTreeSet::from([
+            "Api".to_owned(),
+            "Count".to_owned(),
+            "ENABLED".to_owned(),
+            "Foo".to_owned(),
+            "Kind".to_owned(),
+            "LIMIT".to_owned(),
+            "Qux".to_owned(),
+            "Runner".to_owned(),
+            "Thing".to_owned(),
+            "Zed".to_owned(),
+            "run".to_owned(),
+        ])
     );
+}
+
+#[test]
+fn parse_public_symbols_from_source_ignores_non_public_and_nested_items() {
+    let source = r#"
+pub struct Api;
+
+impl Api {
+    pub fn method(&self) {}
+}
+
+pub(crate) fn internal() {}
+fn private() {}
+
+mod nested {
+    pub struct NestedApi;
+}
+"#;
+
+    let symbols = parse_public_symbols_from_source(source);
+    assert_eq!(symbols, BTreeSet::from(["Api".to_owned()]));
+}
+
+#[test]
+#[should_panic(expected = "public glob re-exports are not supported by this contract")]
+fn parse_public_symbols_from_source_rejects_public_glob_reexports() {
+    let _ = parse_public_symbols_from_source("pub use crate::foo::*;");
+}
+
+#[test]
+fn reth2030_core_public_api_is_documented_at_crate_level() {
+    assert_crate_public_api_docs("crates/reth2030-core/src/lib.rs");
 }
 
 #[test]
 fn reth2030_types_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs(
-        "crates/reth2030-types/src/lib.rs",
-        &[
-            "Address",
-            "BlobTx",
-            "Block",
-            "Eip1559Tx",
-            "Hash32",
-            "Header",
-            "LegacyTx",
-            "LogEntry",
-            "Receipt",
-            "Transaction",
-            "ValidationError",
-        ],
-    );
+    assert_crate_public_api_docs("crates/reth2030-types/src/lib.rs");
 }
 
 #[test]
 fn reth2030_net_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs(
-        "crates/reth2030-net/src/lib.rs",
-        &[
-            "BlockBodyRef",
-            "ExecutionSink",
-            "HeaderRef",
-            "MockSyncSource",
-            "PeerEvent",
-            "PeerId",
-            "PeerInfo",
-            "PeerManager",
-            "PeerManagerError",
-            "PeerSession",
-            "RecordingExecutionSink",
-            "SyncError",
-            "SyncOrchestrator",
-            "SyncReport",
-            "SyncSource",
-            "SyncStepReport",
-        ],
-    );
+    assert_crate_public_api_docs("crates/reth2030-net/src/lib.rs");
 }
 
 #[test]
 fn reth2030_rpc_public_api_is_documented_at_crate_level() {
-    assert_crate_public_api_docs(
-        "crates/reth2030-rpc/src/lib.rs",
-        &[
-            "JsonRpcError",
-            "JsonRpcRequest",
-            "JsonRpcResponse",
-            "RpcServerState",
-            "router",
-            "serve",
-        ],
-    );
+    assert_crate_public_api_docs("crates/reth2030-rpc/src/lib.rs");
 }

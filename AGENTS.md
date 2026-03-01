@@ -269,3 +269,5 @@ Reflection cadence:
 - Learned pitfall: allowing pipeline/background shell operators in the vector CI command can mask `reth2030-vectors` failures (for example `| cat` or trailing `&`) while leaving the job green.
 - Hardened `InMemoryState` deterministic transition coverage for `apply_transaction` edge cases: missing-sender fail-closed replay parity and nonce/recipient saturation boundary replay parity.
 - Learned behavior: `apply_transaction` with a missing sender must fail closed without creating sender/recipient accounts, and replaying saturation boundaries (`nonce = u64::MAX`, recipient near `u128::MAX`) keeps deterministic snapshots.
+- Hardened `crate_api_docs_contract` to parse each crate `lib.rs` with `syn` and enforce exact parity between documented `## Public API` symbols and actual top-level public exports/re-exports.
+- Learned pitfall: hardcoded expected symbol lists in doc contracts can silently miss newly exported APIs; derive exports from syntax and fail closed on public glob re-exports (`pub use ...::*`) to keep coverage explicit.
