@@ -4,7 +4,8 @@ use std::{
 };
 
 use reth2030_core::{
-    Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateStore,
+    Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateError,
+    StateStore,
 };
 use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction};
 
@@ -116,6 +117,49 @@ fn mk_legacy_transfer(
         gas_price: 1,
         value,
         data: Vec::new(),
+    })
+}
+
+fn mk_eip1559_transfer(
+    from: [u8; 20],
+    to: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+    data: Vec<u8>,
+) -> Transaction {
+    Transaction::Eip1559(Eip1559Tx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit,
+        max_fee_per_gas: 100,
+        max_priority_fee_per_gas: 2,
+        value,
+        data,
+    })
+}
+
+fn mk_blob_transfer(
+    from: [u8; 20],
+    to: [u8; 20],
+    nonce: u64,
+    gas_limit: u64,
+    value: u128,
+    data: Vec<u8>,
+    blob_versioned_hashes: Vec<[u8; 32]>,
+) -> Transaction {
+    Transaction::Blob(BlobTx {
+        nonce,
+        from,
+        to: Some(to),
+        gas_limit,
+        max_fee_per_gas: 120,
+        max_priority_fee_per_gas: 3,
+        max_fee_per_blob_gas: 10,
+        value,
+        data,
+        blob_versioned_hashes,
     })
 }
 
@@ -319,6 +363,88 @@ fn repeated_execution_pre_state_failures_are_deterministic_and_fail_closed() {
             "run {run} should preserve fail-closed pre-state snapshot"
         );
     }
+}
+
+#[test]
+fn repeated_execution_state_failures_are_deterministic_through_dyn_dispatch() {
+    let engine: Box<dyn ExecutionEngine> = Box::new(SimpleExecutionEngine::default());
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_transfer(addr(0x81), addr(0x82), 0, 21_000, 6),
+            mk_eip1559_transfer(addr(0x82), addr(0x83), 0, 21_000, 4, vec![0xaa]),
+            mk_blob_transfer(
+                addr(0x83),
+                addr(0x84),
+                0,
+                21_000,
+                5,
+                vec![0xbb, 0xcc],
+                vec![[0x34; 32]],
+            ),
+        ],
+        84_000,
+    );
+
+    let mut initial_state = InMemoryState::new();
+    initial_state.upsert_account(
+        addr(0x81),
+        Account {
+            balance: 6,
+            ..Account::default()
+        },
+    );
+
+    let mut baseline_state = initial_state.clone();
+    let baseline_store: &mut dyn StateStore = &mut baseline_state;
+    let baseline_err = engine
+        .execute_block(baseline_store, &block)
+        .expect_err("baseline execution should fail on mixed-variant state transition");
+    assert_eq!(
+        baseline_err,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0x83),
+            available: 4,
+            requested: 5,
+        })
+    );
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..32 {
+        let mut run_state = initial_state.clone();
+        let run_store: &mut dyn StateStore = &mut run_state;
+        let run_err = engine
+            .execute_block(run_store, &block)
+            .expect_err("repeated execution should fail with identical state-transition error");
+        assert_eq!(
+            run_err, baseline_err,
+            "run {run} produced non-deterministic state-transition error"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic partial post-state"
+        );
+    }
+
+    let sender_a = baseline_snapshot
+        .get(&addr(0x81))
+        .expect("first sender should persist in partial post-state");
+    let sender_b = baseline_snapshot
+        .get(&addr(0x82))
+        .expect("intermediate sender should persist in partial post-state");
+    let sender_c = baseline_snapshot
+        .get(&addr(0x83))
+        .expect("failing sender should persist without mutation from failing tx");
+    assert_eq!(sender_a.balance, 0);
+    assert_eq!(sender_a.nonce, 1);
+    assert_eq!(sender_b.balance, 2);
+    assert_eq!(sender_b.nonce, 1);
+    assert_eq!(sender_c.balance, 4);
+    assert_eq!(sender_c.nonce, 0);
+    assert!(
+        !baseline_snapshot.contains_key(&addr(0x84)),
+        "recipient of failing transaction should not be created"
+    );
 }
 
 #[test]
