@@ -116,6 +116,10 @@ impl SimpleExecutionEngine {
         Self { base_gas_per_tx }
     }
 
+    pub fn no_op() -> Self {
+        Self::new(0)
+    }
+
     fn gas_for_transaction(&self) -> u64 {
         // TODO(fork-rules): replace this constant with fork-aware per-tx gas schedules.
         self.base_gas_per_tx

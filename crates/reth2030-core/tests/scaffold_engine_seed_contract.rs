@@ -4,18 +4,20 @@ use std::{
 };
 
 use reth2030_core::{
-    Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateStore,
+    Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateError,
+    StateStore,
 };
 use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction};
 
 const TODO_SEED_TASK_LINE: &str =
     "- [x] Implement a scaffold engine (no-op or simplified execution path).";
-const REQUIRED_SCAFFOLD_ENGINE_SOURCE_FRAGMENTS: [&str; 8] = [
+const REQUIRED_SCAFFOLD_ENGINE_SOURCE_FRAGMENTS: [&str; 9] = [
     "pub struct SimpleExecutionEngine",
     "pub base_gas_per_tx: u64,",
     "impl Default for SimpleExecutionEngine",
     "base_gas_per_tx: 21_000,",
     "pub fn new(base_gas_per_tx: u64) -> Self",
+    "pub fn no_op() -> Self",
     "fn gas_for_transaction(&self) -> u64",
     "self.base_gas_per_tx",
     "impl ExecutionEngine for SimpleExecutionEngine",
@@ -168,7 +170,7 @@ fn scaffold_engine_executes_empty_block_without_side_effects() {
 
 #[test]
 fn scaffold_engine_supports_noop_gas_path_with_zero_base_gas() {
-    let engine = SimpleExecutionEngine::new(0);
+    let engine = SimpleExecutionEngine::no_op();
     let block = block_with_txs_and_gas_limit(vec![mk_legacy(addr(0x01), addr(0x02), 0, 0, 4)], 0);
 
     let mut state = InMemoryState::new();
@@ -200,7 +202,7 @@ fn scaffold_engine_supports_noop_gas_path_with_zero_base_gas() {
 
 #[test]
 fn scaffold_engine_noop_gas_path_supports_mixed_variants_and_contract_creation() {
-    let engine = SimpleExecutionEngine::new(0);
+    let engine = SimpleExecutionEngine::no_op();
     let block = block_with_txs_and_gas_limit(
         vec![
             mk_legacy(addr(0x01), addr(0x02), 0, 0, 3),
@@ -262,6 +264,51 @@ fn scaffold_engine_noop_gas_path_supports_mixed_variants_and_contract_creation()
         state.snapshot().len(),
         5,
         "contract-creation tx should not create a recipient account"
+    );
+}
+
+#[test]
+fn scaffold_engine_noop_constructor_preserves_partial_progress_on_first_state_error() {
+    let engine = SimpleExecutionEngine::no_op();
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy(addr(0x01), addr(0x02), 0, 0, 4),
+            mk_legacy(addr(0x01), addr(0x03), 1, 0, 1),
+        ],
+        0,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 4,
+            ..Account::default()
+        },
+    );
+
+    let err = engine
+        .execute_block(&mut state, &block)
+        .expect_err("second tx should fail after first no-op-gas tx applies");
+    assert_eq!(
+        err,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0x01),
+            available: 0,
+            requested: 1,
+        })
+    );
+
+    let sender = state.get_account(&addr(0x01)).expect("sender account");
+    let first_recipient = state
+        .get_account(&addr(0x02))
+        .expect("first tx recipient should be present");
+    assert_eq!(sender.balance, 0);
+    assert_eq!(sender.nonce, 1);
+    assert_eq!(first_recipient.balance, 4);
+    assert!(
+        state.get_account(&addr(0x03)).is_none(),
+        "failing tx recipient must not be created"
     );
 }
 

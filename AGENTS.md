@@ -275,3 +275,5 @@ Reflection cadence:
 - Learned pitfall: substring-only required-argument checks allow duplicate long-flag overrides (for example a second `--fixtures-dir`) that can silently redirect the suite while still satisfying naive containment assertions.
 - Hardened mocked-sync runtime coverage for same-peer slot reuse: when the only slot is already occupied by the mock peer ID, `run_mock_sync_once` reconnects in place, rotates session ID, and normalizes the peer address without panic.
 - Hardened `mock_sync_seed_contract` to require this same-peer reconnect-in-place runtime test so the checked mocked-sync seed acceptance cannot silently regress.
+- Added explicit `SimpleExecutionEngine::no_op()` constructor and hardened `scaffold_engine_seed_contract` to require it as the canonical no-op scaffold mode.
+- Learned behavior: `SimpleExecutionEngine::no_op()` still applies successful earlier transitions and then fails closed at the first state error without creating the failing transaction recipient.
