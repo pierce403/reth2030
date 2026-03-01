@@ -273,3 +273,5 @@ Reflection cadence:
 - Learned pitfall: hardcoded expected symbol lists in doc contracts can silently miss newly exported APIs; derive exports from syntax and fail closed on public glob re-exports (`pub use ...::*`) to keep coverage explicit.
 - Hardened `public_vector_ci_seed_contract` required-argument checks to parse command tokens and enforce canonical `vector-conformance` flag values exactly once (`--fixtures-dir`, `--baseline-scorecard`, `--baseline-snapshot`, `--out-dir`).
 - Learned pitfall: substring-only required-argument checks allow duplicate long-flag overrides (for example a second `--fixtures-dir`) that can silently redirect the suite while still satisfying naive containment assertions.
+- Hardened mocked-sync runtime coverage for same-peer slot reuse: when the only slot is already occupied by the mock peer ID, `run_mock_sync_once` reconnects in place, rotates session ID, and normalizes the peer address without panic.
+- Hardened `mock_sync_seed_contract` to require this same-peer reconnect-in-place runtime test so the checked mocked-sync seed acceptance cannot silently regress.
