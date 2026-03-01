@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs, panic,
     path::{Path, PathBuf},
 };
 
@@ -14,24 +14,11 @@ const REQUIRED_VECTOR_JOB_ARGS: [&str; 5] = [
     "--baseline-snapshot vectors/baseline/snapshot.json",
     "--out-dir artifacts/vectors",
 ];
-const DISALLOWED_VECTOR_COMMAND_FRAGMENTS: [&str; 16] = [
-    "||",
-    "&&",
-    ";",
-    "`",
-    "$(",
-    "set +e",
-    "set +o errexit",
-    "set +o pipefail",
-    "trap ",
-    "if ",
-    "then",
-    "while ",
-    "for ",
-    "until ",
-    "case ",
-    "exit 0",
-];
+const DISALLOWED_VECTOR_COMMAND_CONTROL_FRAGMENTS: [&str; 5] = ["||", "&&", ";", "`", "$("];
+const DISALLOWED_VECTOR_COMMAND_PHRASES: [&str; 4] =
+    ["set +e", "set +o errexit", "set +o pipefail", "exit 0"];
+const DISALLOWED_VECTOR_COMMAND_KEYWORDS: [&str; 7] =
+    ["trap", "if", "then", "while", "for", "until", "case"];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -208,12 +195,48 @@ fn assert_fail_closed_vector_command(vector_command: &str) {
         }
     }
 
-    for disallowed_fragment in DISALLOWED_VECTOR_COMMAND_FRAGMENTS {
+    for disallowed_fragment in DISALLOWED_VECTOR_COMMAND_CONTROL_FRAGMENTS {
         assert!(
             !vector_command.contains(disallowed_fragment),
             "vector conformance command must not contain shell control/masking fragment `{disallowed_fragment}`"
         );
     }
+
+    for disallowed_phrase in DISALLOWED_VECTOR_COMMAND_PHRASES {
+        assert!(
+            !vector_command.contains(disallowed_phrase),
+            "vector conformance command must not contain shell control/masking phrase `{disallowed_phrase}`"
+        );
+    }
+
+    for disallowed_keyword in DISALLOWED_VECTOR_COMMAND_KEYWORDS {
+        assert!(
+            !contains_shell_word(vector_command, disallowed_keyword),
+            "vector conformance command must not contain shell control/masking keyword `{disallowed_keyword}`"
+        );
+    }
+}
+
+fn contains_shell_word(command: &str, word: &str) -> bool {
+    command
+        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+        .any(|token| token == word)
+}
+
+fn assert_command_validation_passes(command: &str) {
+    let result = panic::catch_unwind(|| assert_fail_closed_vector_command(command));
+    assert!(
+        result.is_ok(),
+        "expected command validation to pass, but it failed: `{command}`"
+    );
+}
+
+fn assert_command_validation_fails(command: &str) {
+    let result = panic::catch_unwind(|| assert_fail_closed_vector_command(command));
+    assert!(
+        result.is_err(),
+        "expected command validation to fail, but it passed: `{command}`"
+    );
 }
 
 #[test]
@@ -321,6 +344,10 @@ fn vector_conformance_job_is_ungated_and_targets_public_minimal_suite() {
         "vector-conformance job must not be conditionally gated"
     );
     assert!(
+        map_get(vector_job, "strategy").is_none(),
+        "vector-conformance job must not use strategy/matrix indirection that could expand to zero runs"
+    );
+    assert!(
         map_get(vector_job, "needs").is_none(),
         "vector-conformance job must not depend on other jobs that can suppress execution"
     );
@@ -421,4 +448,34 @@ fn public_vector_suite_contains_json_fixtures_including_nested_cases() {
             .any(|path| path.ends_with("004-hex-transfer-success.json")),
         "public vector fixture suite should keep at least one nested JSON fixture"
     );
+}
+
+#[test]
+fn vector_command_guard_accepts_argument_only_multiline_command_and_keyword_substrings() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+--fixtures-dir vectors/ethereum-state-tests/minimal \
+--report-label office-thenable \
+--out-dir artifacts/vectors";
+    assert_command_validation_passes(command);
+}
+
+#[test]
+fn vector_command_guard_rejects_multiline_commands_without_first_line_continuation() {
+    let command = r"cargo run -p reth2030-vectors --locked --
+--fixtures-dir vectors/ethereum-state-tests/minimal";
+    assert_command_validation_fails(command);
+}
+
+#[test]
+fn vector_command_guard_rejects_non_flag_continuation_lines() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+cd vectors \
+--fixtures-dir vectors/ethereum-state-tests/minimal";
+    assert_command_validation_fails(command);
+}
+
+#[test]
+fn vector_command_guard_rejects_shell_control_fragments() {
+    let command = "cargo run -p reth2030-vectors --locked -- --fixtures-dir vectors/ethereum-state-tests/minimal && echo bypass";
+    assert_command_validation_fails(command);
 }
