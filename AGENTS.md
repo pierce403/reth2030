@@ -299,3 +299,5 @@ Reflection cadence:
 - Learned pitfall: supporting uppercase hex prefixes for numeric fields is insufficient if address parsing remains lowercase-only; fixture compatibility can regress unless both parser paths are kept aligned.
 - Hardened `minimal_executable_block_flow_seed_contract` with pre-execution block JSON roundtrip coverage for mixed transfer + contract-creation transactions while receipts remain empty.
 - Learned behavior: a block with receipts but zero transactions must fail closed with `ValidationError::ReceiptCountMismatch`, and pre-execution `to: None` transaction shape is preserved through `Block` JSON roundtrip.
+- Hardened `public_vector_ci_seed_contract` required-argument validation to reject unexpected extra `reth2030-vectors` flags, preserving a strict canonical vector-suite invocation in CI.
+- Learned pitfall: checking only required flag presence/value is insufficient; allowing additional flags can still redirect suite behavior while appearing to satisfy the seed contract.

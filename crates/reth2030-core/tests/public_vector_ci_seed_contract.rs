@@ -274,6 +274,22 @@ fn assert_required_vector_job_arguments(vector_command: &str) {
             "vector conformance command must use canonical value `{required_value}` for `{required_flag}`"
         );
     }
+
+    let mut unexpected_flags: Vec<&str> = flag_values
+        .keys()
+        .copied()
+        .filter(|flag| {
+            !REQUIRED_VECTOR_FLAG_VALUES
+                .iter()
+                .any(|(required_flag, _)| required_flag == flag)
+        })
+        .collect();
+    unexpected_flags.sort_unstable();
+    assert!(
+        unexpected_flags.is_empty(),
+        "vector conformance command must not include unexpected flags: {}",
+        unexpected_flags.join(", ")
+    );
 }
 
 fn contains_shell_word(command: &str, word: &str) -> bool {
@@ -606,5 +622,16 @@ fn vector_required_argument_contract_rejects_non_canonical_required_value() {
 --baseline-scorecard vectors/baseline/scorecard.json \
 --baseline-snapshot vectors/baseline/snapshot.json \
 --out-dir artifacts/vectors-alt";
+    assert_required_argument_validation_fails(command);
+}
+
+#[test]
+fn vector_required_argument_contract_rejects_unexpected_additional_flag() {
+    let command = r"cargo run -p reth2030-vectors --locked -- \
+--fixtures-dir vectors/ethereum-state-tests/minimal \
+--baseline-scorecard vectors/baseline/scorecard.json \
+--baseline-snapshot vectors/baseline/snapshot.json \
+--out-dir artifacts/vectors \
+--report-label public-suite";
     assert_required_argument_validation_fails(command);
 }
