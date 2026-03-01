@@ -16,11 +16,12 @@ const REQUIRED_MAIN_SOURCE_SNIPPETS: [&str; 9] = [
     "let shutdown_result = self.shutdown();",
     "runtime.execute(cli.run_mock_sync)",
 ];
-const REQUIRED_RUNTIME_TESTS: [&str; 9] = [
+const REQUIRED_RUNTIME_TESTS: [&str; 10] = [
     "runtime_rejects_invalid_lifecycle_transitions",
     "shutdown_disconnects_all_connected_peers",
     "shutdown_disconnects_peers_in_stable_peer_id_order",
     "runtime_execute_without_mock_sync_starts_and_stops",
+    "runtime_execute_without_mock_sync_disconnects_preexisting_peers",
     "runtime_execute_with_mock_sync_success_stops_and_disconnects",
     "runtime_execute_with_mock_sync_failure_still_shuts_down",
     "runtime_execute_with_mock_sync_failure_disconnects_preexisting_peers_on_shutdown",

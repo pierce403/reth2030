@@ -726,6 +726,47 @@ mod tests {
     }
 
     #[test]
+    fn runtime_execute_without_mock_sync_disconnects_preexisting_peers() {
+        let mut runtime = runtime_with_max_peers(2);
+
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(2), "127.0.0.1:30304"))
+            .expect("peer 2 should connect before execute");
+        runtime
+            .sync
+            .connect_peer(PeerInfo::new(mock_peer_id(1), "127.0.0.1:30303"))
+            .expect("peer 1 should connect before execute");
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 2);
+
+        runtime
+            .execute(false)
+            .expect("runtime execute without mock sync should still cleanly shut down");
+
+        assert_eq!(runtime.lifecycle, RuntimeState::Stopped);
+        assert_eq!(runtime.sync.peer_manager.peer_count(), 0);
+        assert_eq!(
+            runtime.sync.peer_manager.events(),
+            &[
+                PeerEvent::Connected(mock_peer_id(2)),
+                PeerEvent::Connected(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(1)),
+                PeerEvent::Disconnected(mock_peer_id(2)),
+            ]
+        );
+        assert_eq!(
+            runtime.sync.peer_manager.lifecycle_logs(),
+            &[
+                expected_peer_log("connected", 2, 1),
+                expected_peer_log("connected", 1, 2),
+                expected_peer_log("disconnected", 1, 1),
+                expected_peer_log("disconnected", 2, 0),
+            ]
+        );
+        assert_eq!(runtime.sync.peer_manager.metrics_snapshot(), (2, 2, 0, 0));
+    }
+
+    #[test]
     fn runtime_execute_with_mock_sync_success_stops_and_disconnects() {
         let mut runtime = runtime_with_max_peers(1);
 

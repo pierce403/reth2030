@@ -313,3 +313,5 @@ Reflection cadence:
 - Learned pitfall: protecting only the bootstrap row allows later historical rows to be rewritten undetected if chronology/latest-scorecard checks still pass.
 - Hardened `execution_determinism_seed_contract` with repeated-run invalid-block coverage across all `ValidationError` variants (`GasUsedExceedsLimit`, `ReceiptCountMismatch`, `ReceiptCumulativeGasNotMonotonic`, `ReceiptFinalGasUsedMismatch`).
 - Learned behavior: invalid-block validation failures are deterministic and fail closed before any state transition, preserving identical state snapshots across repeated runs.
+- Hardened startup/shutdown runtime coverage for `execute(false)` with pre-existing connected peers so the no-mock-sync path still performs deterministic peer cleanup during shutdown.
+- Learned behavior: `NodeRuntime::execute(false)` always runs shutdown cleanup after start, disconnecting any pre-connected peers in stable `PeerId` order and preserving observability counters.
