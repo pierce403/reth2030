@@ -16,7 +16,7 @@ const REQUIRED_PEER_SOURCE_SNIPPETS: [&str; 8] = [
     "self.lifecycle_metrics.record(&event, self.sessions.len());",
     "Self::increment(&mut self.rejected_max_peers_total)",
 ];
-const REQUIRED_PEER_UNIT_TESTS: [&str; 10] = [
+const REQUIRED_PEER_UNIT_TESTS: [&str; 11] = [
     "connect_assigns_incrementing_session_ids_and_reconnects_in_place",
     "max_peers_limit_applies_only_to_new_peer_ids",
     "max_peers_rejection_takes_precedence_over_session_id_overflow_for_new_peer",
@@ -24,6 +24,7 @@ const REQUIRED_PEER_UNIT_TESTS: [&str; 10] = [
     "connect_fails_closed_on_session_id_overflow",
     "disconnecting_unknown_peer_does_not_emit_observability_signals",
     "clearing_events_does_not_reset_logs_or_metrics",
+    "clearing_events_then_recording_new_events_preserves_cumulative_observability",
     "connected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
     "disconnected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
     "rejected_metric_saturates_at_u64_max_and_keeps_active_peers_current",

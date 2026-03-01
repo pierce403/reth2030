@@ -602,6 +602,62 @@ mod tests {
     }
 
     #[test]
+    fn clearing_events_then_recording_new_events_preserves_cumulative_observability() {
+        let mut manager = PeerManager::new(2);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("first connect must succeed");
+        manager
+            .connect(PeerInfo::new(peer_id(2), "127.0.0.1:30304"))
+            .expect("second connect must succeed");
+
+        manager.clear_events();
+        assert!(manager.events().is_empty());
+
+        assert!(manager.disconnect(&peer_id(1)));
+        manager
+            .connect(PeerInfo::new(peer_id(3), "127.0.0.1:30305"))
+            .expect("new peer should connect after one disconnect");
+
+        assert_eq!(
+            manager.events(),
+            &[
+                PeerEvent::Disconnected(peer_id(1)),
+                PeerEvent::Connected(peer_id(3)),
+            ]
+        );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.connected peer_id={} active_peers=2",
+                    format_peer_id(&peer_id(2))
+                ),
+                format!(
+                    "peer.disconnected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.connected peer_id={} active_peers=2",
+                    format_peer_id(&peer_id(3))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (3, 1, 0, 2));
+        assert_eq!(
+            manager.connected_peers(),
+            vec![
+                PeerInfo::new(peer_id(2), "127.0.0.1:30304"),
+                PeerInfo::new(peer_id(3), "127.0.0.1:30305"),
+            ]
+        );
+    }
+
+    #[test]
     fn connected_metric_saturates_at_u64_max_and_keeps_active_peers_current() {
         let mut manager = PeerManager::new(1);
         manager.lifecycle_metrics.connected_total = u64::MAX;

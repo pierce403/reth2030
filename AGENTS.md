@@ -317,3 +317,5 @@ Reflection cadence:
 - Learned behavior: `NodeRuntime::execute(false)` always runs shutdown cleanup after start, disconnecting any pre-connected peers in stable `PeerId` order and preserving observability counters.
 - Hardened `reth2030-types` numeric serde boundary coverage with fractional JSON-number rejection tests across all transaction `u128` fields (`Legacy`, `Eip1559`, `Blob`).
 - Learned behavior: numeric JSON input compatibility for `u128` fields is intentionally integer-only (`as_u64` back-compat); fractional JSON numbers must fail closed with the non-negative-integer guard.
+- Hardened peer lifecycle observability unit coverage with a post-`clear_events` replay test that locks cumulative log/metric behavior while new events repopulate the transient event buffer.
+- Learned behavior: `PeerManager::clear_events` resets only `events()`; subsequent lifecycle transitions append to existing `lifecycle_logs`, keep counters cumulative, and still update `active_peers` to current session count.
