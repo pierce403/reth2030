@@ -16,13 +16,16 @@ const REQUIRED_PEER_SOURCE_SNIPPETS: [&str; 8] = [
     "self.lifecycle_metrics.record(&event, self.sessions.len());",
     "Self::increment(&mut self.rejected_max_peers_total)",
 ];
-const REQUIRED_PEER_UNIT_TESTS: [&str; 6] = [
+const REQUIRED_PEER_UNIT_TESTS: [&str; 9] = [
     "connect_assigns_incrementing_session_ids_and_reconnects_in_place",
     "max_peers_limit_applies_only_to_new_peer_ids",
     "disconnect_is_idempotent_and_clears_session_state",
     "connect_fails_closed_on_session_id_overflow",
     "disconnecting_unknown_peer_does_not_emit_observability_signals",
     "clearing_events_does_not_reset_logs_or_metrics",
+    "connected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
+    "disconnected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
+    "rejected_metric_saturates_at_u64_max_and_keeps_active_peers_current",
 ];
 const REQUIRED_SYNC_TESTS: [&str; 1] = ["peer_lifecycle_events_are_observable"];
 const REQUIRED_SYNC_ASSERTION_SNIPPETS: [&str; 5] = [

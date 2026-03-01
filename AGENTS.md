@@ -254,3 +254,5 @@ Reflection cadence:
 - Learned workflow: when a crate-seed TODO item is already checked, strengthen its seed contract with test-presence/serde-boundary invariants rather than reworking the crate implementation.
 - Hardened `reth2030_net_seed_contract` to require deterministic connected-peer ordering coverage and reconnect-overflow fail-closed coverage in `crates/reth2030-net/src/peer.rs`.
 - Learned behavior: if `next_session_id` overflows during reconnect of an existing peer, `PeerManager::connect` must fail closed without mutating the existing session or emitting extra observability signals.
+- Hardened peer lifecycle observability coverage with `u64::MAX` saturation tests for connected/disconnected/rejected metrics in `crates/reth2030-net/src/peer.rs`.
+- Learned behavior: lifecycle metric counters saturate at `u64::MAX` without wrapping, while `active_peers` must still reflect the latest session count after each event.

@@ -555,4 +555,93 @@ mod tests {
         );
         assert_eq!(manager.metrics_snapshot(), (1, 0, 0, 1));
     }
+
+    #[test]
+    fn connected_metric_saturates_at_u64_max_and_keeps_active_peers_current() {
+        let mut manager = PeerManager::new(1);
+        manager.lifecycle_metrics.connected_total = u64::MAX;
+
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("connect must succeed");
+
+        assert_eq!(manager.events(), &[PeerEvent::Connected(peer_id(1))]);
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[format!(
+                "peer.connected peer_id={} active_peers=1",
+                format_peer_id(&peer_id(1))
+            )]
+        );
+        assert_eq!(manager.metrics_snapshot(), (u64::MAX, 0, 0, 1));
+    }
+
+    #[test]
+    fn disconnected_metric_saturates_at_u64_max_and_keeps_active_peers_current() {
+        let mut manager = PeerManager::new(1);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("connect must succeed");
+        manager.lifecycle_metrics.disconnected_total = u64::MAX;
+
+        assert!(manager.disconnect(&peer_id(1)));
+
+        assert_eq!(
+            manager.events(),
+            &[
+                PeerEvent::Connected(peer_id(1)),
+                PeerEvent::Disconnected(peer_id(1)),
+            ]
+        );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.disconnected peer_id={} active_peers=0",
+                    format_peer_id(&peer_id(1))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, u64::MAX, 0, 0));
+    }
+
+    #[test]
+    fn rejected_metric_saturates_at_u64_max_and_keeps_active_peers_current() {
+        let mut manager = PeerManager::new(1);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("connect must succeed");
+        manager.lifecycle_metrics.rejected_max_peers_total = u64::MAX;
+
+        let err = manager
+            .connect(PeerInfo::new(peer_id(2), "127.0.0.1:30304"))
+            .expect_err("new peer must be rejected at max peers");
+
+        assert_eq!(err, PeerManagerError::MaxPeersReached { max_peers: 1 });
+        assert_eq!(
+            manager.events(),
+            &[
+                PeerEvent::Connected(peer_id(1)),
+                PeerEvent::RejectedMaxPeers(peer_id(2)),
+            ]
+        );
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[
+                format!(
+                    "peer.connected peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(1))
+                ),
+                format!(
+                    "peer.rejected_max_peers peer_id={} active_peers=1",
+                    format_peer_id(&peer_id(2))
+                ),
+            ]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, 0, u64::MAX, 1));
+    }
 }
