@@ -8,12 +8,14 @@ use reth2030_types::{Eip1559Tx, LegacyTx, Transaction};
 
 const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] State backend passes deterministic transition tests.";
-const REQUIRED_STATE_DETERMINISM_TESTS: [&str; 6] = [
+const REQUIRED_STATE_DETERMINISM_TESTS: [&str; 8] = [
     "fn storage_roundtrip_is_deterministic()",
     "fn apply_transactions_is_deterministic()",
     "fn zero_value_transfer_from_missing_sender_creates_accounts_deterministically()",
     "fn apply_transactions_partial_progress_failure_is_deterministic()",
     "fn apply_transaction_contract_creation_is_deterministic()",
+    "fn apply_transaction_from_missing_sender_is_deterministic_and_fail_closed()",
+    "fn apply_transaction_nonce_and_recipient_balance_saturation_is_deterministic()",
     "fn storage_transition_sequence_is_deterministic_across_replays()",
 ];
 
@@ -160,4 +162,80 @@ fn deterministic_zero_value_and_storage_sequence_replay_matches_snapshots() {
     state_b.set_storage(addr(0xbb), storage_key, [0x33; 32]);
 
     assert_eq!(state_a.snapshot(), state_b.snapshot());
+}
+
+#[test]
+fn deterministic_apply_transaction_missing_sender_replay_is_fail_closed() {
+    let tx = Transaction::Legacy(LegacyTx {
+        nonce: 0,
+        from: addr(0x0a),
+        to: Some(addr(0x0b)),
+        gas_limit: 21_000,
+        gas_price: 1,
+        value: 1,
+        data: Vec::new(),
+    });
+
+    let mut state_a = InMemoryState::new();
+    let mut state_b = InMemoryState::new();
+
+    let err_a = state_a
+        .apply_transaction(&tx)
+        .expect_err("first run must fail");
+    let err_b = state_b
+        .apply_transaction(&tx)
+        .expect_err("second run must fail");
+
+    assert_eq!(
+        err_a,
+        StateError::InsufficientBalance {
+            address: addr(0x0a),
+            available: 0,
+            requested: 1,
+        }
+    );
+    assert_eq!(err_a, err_b);
+    assert_eq!(state_a.snapshot(), state_b.snapshot());
+    assert_eq!(state_a.snapshot().len(), 0);
+}
+
+#[test]
+fn deterministic_apply_transaction_saturation_replay_matches_snapshot() {
+    let tx = Transaction::Legacy(LegacyTx {
+        nonce: 0,
+        from: addr(0xaa),
+        to: Some(addr(0xbb)),
+        gas_limit: 21_000,
+        gas_price: 1,
+        value: 5,
+        data: Vec::new(),
+    });
+
+    let mut state_a = InMemoryState::new();
+    state_a.upsert_account(
+        addr(0xaa),
+        Account {
+            nonce: u64::MAX,
+            balance: 10,
+            ..Account::default()
+        },
+    );
+    state_a.upsert_account(
+        addr(0xbb),
+        Account {
+            balance: u128::MAX - 2,
+            ..Account::default()
+        },
+    );
+    let mut state_b = state_a.clone();
+
+    state_a.apply_transaction(&tx).expect("first run");
+    state_b.apply_transaction(&tx).expect("second run");
+
+    assert_eq!(state_a.snapshot(), state_b.snapshot());
+    let sender = state_a.get_account(&addr(0xaa)).expect("sender account");
+    let recipient = state_a.get_account(&addr(0xbb)).expect("recipient account");
+    assert_eq!(sender.balance, 5);
+    assert_eq!(sender.nonce, u64::MAX);
+    assert_eq!(recipient.balance, u128::MAX);
 }

@@ -267,3 +267,5 @@ Reflection cadence:
 - Learned behavior: overflow on a later transaction is fail-closed before that transaction's state application; only earlier successful transaction progress persists deterministically across reruns.
 - Hardened `public_vector_ci_seed_contract` fail-closed command guards to reject single-pipe and background execution fragments (`|`, `&`) in addition to existing control operators.
 - Learned pitfall: allowing pipeline/background shell operators in the vector CI command can mask `reth2030-vectors` failures (for example `| cat` or trailing `&`) while leaving the job green.
+- Hardened `InMemoryState` deterministic transition coverage for `apply_transaction` edge cases: missing-sender fail-closed replay parity and nonce/recipient saturation boundary replay parity.
+- Learned behavior: `apply_transaction` with a missing sender must fail closed without creating sender/recipient accounts, and replaying saturation boundaries (`nonce = u64::MAX`, recipient near `u128::MAX`) keeps deterministic snapshots.
