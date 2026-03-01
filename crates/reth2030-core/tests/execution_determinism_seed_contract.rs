@@ -7,7 +7,9 @@ use reth2030_core::{
     Account, ExecutionEngine, ExecutionError, InMemoryState, SimpleExecutionEngine, StateError,
     StateStore,
 };
-use reth2030_types::{BlobTx, Block, Eip1559Tx, Header, LegacyTx, Transaction};
+use reth2030_types::{
+    BlobTx, Block, Eip1559Tx, Header, LegacyTx, Receipt, Transaction, ValidationError,
+};
 
 const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] Execution output is deterministic under repeated runs.";
@@ -40,6 +42,15 @@ fn block_with_txs_and_gas_limit(txs: Vec<Transaction>, gas_limit: u64) -> Block 
         },
         transactions: txs,
         receipts: Vec::new(),
+    }
+}
+
+fn receipt_with_cumulative_gas(hash_byte: u8, cumulative_gas_used: u64) -> Receipt {
+    Receipt {
+        tx_hash: [hash_byte; 32],
+        success: true,
+        cumulative_gas_used,
+        logs: Vec::new(),
     }
 }
 
@@ -362,6 +373,109 @@ fn repeated_execution_pre_state_failures_are_deterministic_and_fail_closed() {
             baseline_snapshot,
             "run {run} should preserve fail-closed pre-state snapshot"
         );
+    }
+}
+
+#[test]
+fn repeated_execution_invalid_block_failures_are_deterministic_and_fail_closed() {
+    struct InvalidBlockCase {
+        name: &'static str,
+        block: Block,
+        expected: ValidationError,
+    }
+
+    let mut gas_used_exceeds_limit = block_with_txs_and_gas_limit(Vec::new(), 10);
+    gas_used_exceeds_limit.header.gas_used = 11;
+
+    let mut receipt_count_mismatch = block_with_txs_and_gas_limit(
+        vec![mk_legacy_transfer(addr(0x60), addr(0x61), 0, 21_000, 1)],
+        21_000,
+    );
+    receipt_count_mismatch.receipts = vec![
+        receipt_with_cumulative_gas(0x60, 0),
+        receipt_with_cumulative_gas(0x61, 0),
+    ];
+
+    let mut receipt_cumulative_gas_not_monotonic = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_transfer(addr(0x62), addr(0x63), 0, 21_000, 1),
+            mk_legacy_transfer(addr(0x62), addr(0x64), 1, 21_000, 1),
+        ],
+        42_000,
+    );
+    receipt_cumulative_gas_not_monotonic.header.gas_used = 1;
+    receipt_cumulative_gas_not_monotonic.receipts = vec![
+        receipt_with_cumulative_gas(0x62, 2),
+        receipt_with_cumulative_gas(0x63, 1),
+    ];
+
+    let mut receipt_final_gas_used_mismatch = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_transfer(addr(0x65), addr(0x66), 0, 21_000, 1),
+            mk_legacy_transfer(addr(0x65), addr(0x67), 1, 21_000, 1),
+        ],
+        42_000,
+    );
+    receipt_final_gas_used_mismatch.header.gas_used = 3;
+    receipt_final_gas_used_mismatch.receipts = vec![
+        receipt_with_cumulative_gas(0x64, 1),
+        receipt_with_cumulative_gas(0x65, 2),
+    ];
+
+    let cases = vec![
+        InvalidBlockCase {
+            name: "gas_used_exceeds_limit",
+            block: gas_used_exceeds_limit,
+            expected: ValidationError::GasUsedExceedsLimit,
+        },
+        InvalidBlockCase {
+            name: "receipt_count_mismatch",
+            block: receipt_count_mismatch,
+            expected: ValidationError::ReceiptCountMismatch,
+        },
+        InvalidBlockCase {
+            name: "receipt_cumulative_gas_not_monotonic",
+            block: receipt_cumulative_gas_not_monotonic,
+            expected: ValidationError::ReceiptCumulativeGasNotMonotonic,
+        },
+        InvalidBlockCase {
+            name: "receipt_final_gas_used_mismatch",
+            block: receipt_final_gas_used_mismatch,
+            expected: ValidationError::ReceiptFinalGasUsedMismatch,
+        },
+    ];
+
+    let engine: Box<dyn ExecutionEngine> = Box::new(SimpleExecutionEngine::default());
+    let mut initial_state = InMemoryState::new();
+    initial_state.upsert_account(
+        addr(0x90),
+        Account {
+            balance: 9,
+            nonce: 2,
+            ..Account::default()
+        },
+    );
+    let baseline_snapshot = initial_state.snapshot();
+
+    for case in cases {
+        for run in 0..32 {
+            let mut run_state = initial_state.clone();
+            let run_err = engine
+                .execute_block(&mut run_state, &case.block)
+                .expect_err("invalid block should fail before state transitions");
+            assert_eq!(
+                run_err,
+                ExecutionError::InvalidBlock(case.expected),
+                "case `{}` run {run} produced non-deterministic invalid-block error",
+                case.name
+            );
+            assert_eq!(
+                run_state.snapshot(),
+                baseline_snapshot,
+                "case `{}` run {run} should preserve fail-closed state snapshot",
+                case.name
+            );
+        }
     }
 }
 

@@ -311,3 +311,5 @@ Reflection cadence:
 - Learned behavior: repeated dyn-dispatched execution failures preserve identical `ExecutionError::State` values and identical partial post-state snapshots across reruns.
 - Hardened `conformance_metric_seed_contract` with anchored-history prefix invariants so existing timeline entries remain immutable while new entries append.
 - Learned pitfall: protecting only the bootstrap row allows later historical rows to be rewritten undetected if chronology/latest-scorecard checks still pass.
+- Hardened `execution_determinism_seed_contract` with repeated-run invalid-block coverage across all `ValidationError` variants (`GasUsedExceedsLimit`, `ReceiptCountMismatch`, `ReceiptCumulativeGasNotMonotonic`, `ReceiptFinalGasUsedMismatch`).
+- Learned behavior: invalid-block validation failures are deterministic and fail closed before any state transition, preserving identical state snapshots across repeated runs.
