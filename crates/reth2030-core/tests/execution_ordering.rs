@@ -411,6 +411,143 @@ fn block_execution_respects_transaction_order() {
 }
 
 #[test]
+fn block_execution_order_controls_cross_sender_funding_dependencies() {
+    let engine = SimpleExecutionEngine::default();
+
+    let fund = mk_legacy(addr(0xa1), addr(0xb1), 0, 8);
+    let spend = mk_legacy(addr(0xb1), addr(0xc1), 0, 8);
+
+    let ordered_block = block_with_txs(vec![fund.clone(), spend.clone()]);
+    let reversed_block = block_with_txs(vec![spend, fund]);
+
+    let mut ordered_state = InMemoryState::new();
+    ordered_state.upsert_account(
+        addr(0xa1),
+        Account {
+            balance: 8,
+            ..Account::default()
+        },
+    );
+    let mut reversed_state = ordered_state.clone();
+
+    let ordered_result = engine
+        .execute_block(&mut ordered_state, &ordered_block)
+        .expect("ordered block should execute when funding precedes dependent spend");
+    assert_eq!(ordered_result.tx_results.len(), 2);
+    assert_eq!(ordered_result.receipts.len(), 2);
+    assert_eq!(ordered_result.tx_results[0].tx_index, 0);
+    assert_eq!(ordered_result.tx_results[1].tx_index, 1);
+
+    let sender_a = ordered_state
+        .get_account(&addr(0xa1))
+        .expect("funder should be debited");
+    let sender_b = ordered_state
+        .get_account(&addr(0xb1))
+        .expect("dependent sender should be created and debited");
+    let recipient_c = ordered_state
+        .get_account(&addr(0xc1))
+        .expect("final recipient should receive funds");
+    assert_eq!(sender_a.balance, 0);
+    assert_eq!(sender_a.nonce, 1);
+    assert_eq!(sender_b.balance, 0);
+    assert_eq!(sender_b.nonce, 1);
+    assert_eq!(recipient_c.balance, 8);
+
+    let reversed_err = engine
+        .execute_block(&mut reversed_state, &reversed_block)
+        .expect_err("reordered block should fail before funding-dependent spend");
+    assert_eq!(
+        reversed_err,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0xb1),
+            available: 0,
+            requested: 8,
+        })
+    );
+
+    let reversed_funder = reversed_state
+        .get_account(&addr(0xa1))
+        .expect("funder account should remain unchanged on early failure");
+    assert_eq!(reversed_funder.balance, 8);
+    assert_eq!(reversed_funder.nonce, 0);
+    assert!(
+        reversed_state.get_account(&addr(0xb1)).is_none(),
+        "dependent sender account must not be created when reordered spend fails first"
+    );
+    assert!(
+        reversed_state.get_account(&addr(0xc1)).is_none(),
+        "recipient account must not be created when reordered spend fails first"
+    );
+}
+
+#[test]
+fn block_execution_halts_at_first_ordered_failure_in_mixed_variant_dependency_chain() {
+    let engine = SimpleExecutionEngine::default();
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy(addr(0xd1), addr(0xd2), 0, 9),
+            mk_eip1559(addr(0xd2), addr(0xd3), 0, 21_000, 4, vec![0xaa]),
+            mk_blob(
+                addr(0xd3),
+                addr(0xd4),
+                0,
+                21_000,
+                5,
+                vec![0xbb, 0xcc],
+                vec![[0x12; 32]],
+            ),
+            mk_legacy(addr(0xd2), addr(0xd5), 1, 1),
+        ],
+        84_000,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0xd1),
+        Account {
+            balance: 9,
+            ..Account::default()
+        },
+    );
+
+    let err = engine
+        .execute_block(&mut state, &block)
+        .expect_err("third transaction should fail and halt later execution");
+    assert_eq!(
+        err,
+        ExecutionError::State(StateError::InsufficientBalance {
+            address: addr(0xd3),
+            available: 4,
+            requested: 5,
+        })
+    );
+
+    let account_a = state
+        .get_account(&addr(0xd1))
+        .expect("original sender should reflect first transfer");
+    let account_b = state
+        .get_account(&addr(0xd2))
+        .expect("intermediate account should retain partial progress");
+    let account_c = state
+        .get_account(&addr(0xd3))
+        .expect("second transfer recipient should persist despite later failure");
+    assert_eq!(account_a.balance, 0);
+    assert_eq!(account_a.nonce, 1);
+    assert_eq!(account_b.balance, 5);
+    assert_eq!(account_b.nonce, 1);
+    assert_eq!(account_c.balance, 4);
+    assert_eq!(account_c.nonce, 0);
+    assert!(
+        state.get_account(&addr(0xd4)).is_none(),
+        "failing transaction recipient must remain absent"
+    );
+    assert!(
+        state.get_account(&addr(0xd5)).is_none(),
+        "transactions after first failure must not execute"
+    );
+}
+
+#[test]
 fn receipt_hash_is_stable_for_same_tx_across_positions() {
     let engine = SimpleExecutionEngine::default();
     let filler = mk_legacy(addr(0x10), addr(0x11), 0, 1);

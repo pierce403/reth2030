@@ -256,3 +256,6 @@ Reflection cadence:
 - Learned behavior: if `next_session_id` overflows during reconnect of an existing peer, `PeerManager::connect` must fail closed without mutating the existing session or emitting extra observability signals.
 - Hardened peer lifecycle observability coverage with `u64::MAX` saturation tests for connected/disconnected/rejected metrics in `crates/reth2030-net/src/peer.rs`.
 - Learned behavior: lifecycle metric counters saturate at `u64::MAX` without wrapping, while `active_peers` must still reflect the latest session count after each event.
+- Added `execution_ordering_seed_contract` tests to lock the checked Phase 2 task for multi-transaction execution ordering (`TODO.md` checkmark + required integration-test presence + order-dependent first-success behavior contract).
+- Hardened `execution_ordering` integration coverage with cross-sender funding dependencies and mixed-variant dependency-chain halt semantics (first failure stops later transactions while preserving prior progress).
+- Learned pitfall: ordering tests that rely on state-level failure precedence must set explicit block gas limits; the default helper gas limit can trigger `GasLimitExceeded` before the intended balance failure path.
