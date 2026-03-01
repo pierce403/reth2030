@@ -320,3 +320,68 @@ fn repeated_execution_pre_state_failures_are_deterministic_and_fail_closed() {
         );
     }
 }
+
+#[test]
+fn repeated_execution_failure_is_deterministic_for_cumulative_gas_overflow() {
+    let engine = SimpleExecutionEngine::new(u64::MAX);
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_transfer(addr(0x70), addr(0x71), 0, u64::MAX, 1),
+            mk_legacy_transfer(addr(0x70), addr(0x72), 1, u64::MAX, 1),
+        ],
+        u64::MAX,
+    );
+
+    let mut initial_state = InMemoryState::new();
+    initial_state.upsert_account(
+        addr(0x70),
+        Account {
+            balance: 2,
+            ..Account::default()
+        },
+    );
+
+    let mut baseline_state = initial_state.clone();
+    let baseline_err = engine
+        .execute_block(&mut baseline_state, &block)
+        .expect_err("baseline execution should fail on cumulative gas overflow");
+    assert_eq!(
+        baseline_err,
+        ExecutionError::GasOverflow {
+            cumulative_gas: u64::MAX,
+            gas_used: u64::MAX,
+            tx_index: 1,
+        }
+    );
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..32 {
+        let mut run_state = initial_state.clone();
+        let run_err = engine
+            .execute_block(&mut run_state, &block)
+            .expect_err("repeated execution should fail with identical gas-overflow error");
+        assert_eq!(
+            run_err, baseline_err,
+            "run {run} produced non-deterministic gas-overflow error"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic partial post-state"
+        );
+    }
+
+    let sender = baseline_snapshot
+        .get(&addr(0x70))
+        .expect("sender should remain in partial post-state");
+    assert_eq!(sender.balance, 1);
+    assert_eq!(sender.nonce, 1);
+    let first_recipient = baseline_snapshot
+        .get(&addr(0x71))
+        .expect("first recipient should be present");
+    assert_eq!(first_recipient.balance, 1);
+    assert!(
+        !baseline_snapshot.contains_key(&addr(0x72)),
+        "overflowing tx recipient should not be created"
+    );
+}

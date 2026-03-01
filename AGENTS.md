@@ -263,3 +263,5 @@ Reflection cadence:
 - Learned pitfall: using `Path::is_dir()` alone in recursive fixture walkers follows symlinks; use `fs::symlink_metadata` + `file_type` checks to keep traversal deterministic and bounded.
 - Added `architecture_notes_seed_contract` tests to lock the checked Phase 0 ADR seed (`TODO.md` checkmark + `docs/architecture-notes` directory/bootstrap ADR + required ADR contract-test coverage).
 - Learned pitfall: ADR content contracts alone can miss seed drift if the TODO checkmark and bootstrap ADR anchor are not asserted together.
+- Hardened `execution_determinism_seed_contract` with repeated-run cumulative-gas-overflow coverage (`ExecutionError::GasOverflow`) plus partial post-state snapshot parity checks.
+- Learned behavior: overflow on a later transaction is fail-closed before that transaction's state application; only earlier successful transaction progress persists deterministically across reruns.
