@@ -391,6 +391,186 @@ fn repeated_execution_output_is_deterministic_for_noop_mixed_variants_through_dy
 }
 
 #[test]
+fn repeated_execution_output_is_deterministic_for_hash_sensitive_metadata_variations() {
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            Transaction::Legacy(LegacyTx {
+                nonce: 0,
+                from: addr(0xa1),
+                to: Some(addr(0xa2)),
+                gas_limit: 30_000,
+                gas_price: 1,
+                value: 0,
+                data: vec![0x01],
+            }),
+            Transaction::Legacy(LegacyTx {
+                nonce: 0,
+                from: addr(0xa1),
+                to: Some(addr(0xa2)),
+                gas_limit: 30_000,
+                gas_price: 2,
+                value: 0,
+                data: vec![0x01],
+            }),
+            Transaction::Legacy(LegacyTx {
+                nonce: 0,
+                from: addr(0xa1),
+                to: Some(addr(0xa2)),
+                gas_limit: 30_000,
+                gas_price: 2,
+                value: 0,
+                data: vec![0x02],
+            }),
+            mk_eip1559_transfer(addr(0xa1), addr(0xa2), 0, 30_000, 0, vec![0x02]),
+            mk_blob_transfer(
+                addr(0xc1),
+                addr(0xc2),
+                0,
+                30_000,
+                0,
+                vec![0x03],
+                vec![[0xaa; 32], [0xbb; 32]],
+            ),
+            mk_blob_transfer(
+                addr(0xc1),
+                addr(0xc2),
+                0,
+                30_000,
+                0,
+                vec![0x03],
+                vec![[0xbb; 32], [0xaa; 32]],
+            ),
+            mk_legacy_contract_creation(addr(0xe1), 0, 30_000, 0, vec![0x04]),
+            mk_legacy_transfer(addr(0xe1), addr(0xe2), 0, 30_000, 0),
+        ],
+        200_000,
+    );
+
+    let initial_state = InMemoryState::new();
+    let engine = SimpleExecutionEngine::default();
+
+    let mut baseline_state = initial_state.clone();
+    let baseline_result = engine
+        .execute_block(&mut baseline_state, &block)
+        .expect("baseline metadata-variation execution should succeed");
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..32 {
+        let mut run_state = initial_state.clone();
+        let run_result = engine
+            .execute_block(&mut run_state, &block)
+            .expect("repeated metadata-variation execution should succeed");
+        assert_eq!(
+            run_result, baseline_result,
+            "run {run} produced non-deterministic execution output"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic post-state snapshot"
+        );
+    }
+
+    assert_eq!(baseline_result.total_gas_used, 168_000);
+    assert_eq!(baseline_result.tx_results.len(), 8);
+    assert_eq!(baseline_result.receipts.len(), 8);
+
+    let unique_hashes: BTreeSet<_> = baseline_result
+        .receipts
+        .iter()
+        .map(|receipt| receipt.tx_hash)
+        .collect();
+    assert_eq!(
+        unique_hashes.len(),
+        baseline_result.receipts.len(),
+        "metadata and variant differences should keep tx hashes uniquely addressable"
+    );
+
+    assert_ne!(
+        baseline_result.receipts[0].tx_hash, baseline_result.receipts[1].tx_hash,
+        "legacy gas_price differences should affect deterministic tx hashing"
+    );
+    assert_ne!(
+        baseline_result.receipts[1].tx_hash, baseline_result.receipts[2].tx_hash,
+        "legacy payload differences should affect deterministic tx hashing"
+    );
+    assert_ne!(
+        baseline_result.receipts[2].tx_hash, baseline_result.receipts[3].tx_hash,
+        "variant domain separation should affect deterministic tx hashing"
+    );
+    assert_ne!(
+        baseline_result.receipts[4].tx_hash, baseline_result.receipts[5].tx_hash,
+        "blob hash ordering should affect deterministic tx hashing"
+    );
+    assert_ne!(
+        baseline_result.receipts[6].tx_hash, baseline_result.receipts[7].tx_hash,
+        "contract-creation vs transfer destination shape should affect deterministic tx hashing"
+    );
+
+    let observed_accounts: BTreeSet<_> = baseline_snapshot.keys().copied().collect();
+    let expected_accounts: BTreeSet<_> = [
+        addr(0xa1),
+        addr(0xa2),
+        addr(0xc1),
+        addr(0xc2),
+        addr(0xe1),
+        addr(0xe2),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(observed_accounts, expected_accounts);
+
+    assert_eq!(
+        baseline_snapshot
+            .get(&addr(0xa1))
+            .expect("sender A should exist")
+            .nonce,
+        4
+    );
+    assert_eq!(
+        baseline_snapshot
+            .get(&addr(0xc1))
+            .expect("sender C should exist")
+            .nonce,
+        2
+    );
+    assert_eq!(
+        baseline_snapshot
+            .get(&addr(0xe1))
+            .expect("sender E should exist")
+            .nonce,
+        2
+    );
+    assert_eq!(
+        baseline_snapshot
+            .get(&addr(0xa2))
+            .expect("recipient A should exist")
+            .nonce,
+        0
+    );
+    assert_eq!(
+        baseline_snapshot
+            .get(&addr(0xc2))
+            .expect("recipient C should exist")
+            .nonce,
+        0
+    );
+    assert_eq!(
+        baseline_snapshot
+            .get(&addr(0xe2))
+            .expect("recipient E should exist")
+            .nonce,
+        0
+    );
+    assert!(
+        baseline_snapshot
+            .values()
+            .all(|account| account.balance == 0),
+        "zero-value metadata-variation transactions should keep balances at zero"
+    );
+}
+
+#[test]
 fn repeated_execution_failure_is_deterministic_for_block_gas_limit_exceeded() {
     let engine = SimpleExecutionEngine::new(30_000);
     let block = block_with_txs_and_gas_limit(
