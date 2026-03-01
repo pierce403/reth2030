@@ -319,3 +319,5 @@ Reflection cadence:
 - Learned behavior: numeric JSON input compatibility for `u128` fields is intentionally integer-only (`as_u64` back-compat); fractional JSON numbers must fail closed with the non-negative-integer guard.
 - Hardened peer lifecycle observability unit coverage with a post-`clear_events` replay test that locks cumulative log/metric behavior while new events repopulate the transient event buffer.
 - Learned behavior: `PeerManager::clear_events` resets only `events()`; subsequent lifecycle transitions append to existing `lifecycle_logs`, keep counters cumulative, and still update `active_peers` to current session count.
+- Hardened `execution_determinism_seed_contract` with repeated-run no-op execution coverage through `Box<dyn ExecutionEngine>` + `&mut dyn StateStore` for mixed `Legacy`/`Eip1559`/`Blob` transactions.
+- Learned behavior: `SimpleExecutionEngine::no_op()` preserves deterministic zero-gas outputs (plateau cumulative gas/receipts) while still applying deterministic state transitions, including zero-value missing-sender account materialization and sender-only contract creation effects.

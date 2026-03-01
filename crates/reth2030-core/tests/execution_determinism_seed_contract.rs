@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -268,6 +269,124 @@ fn repeated_execution_output_is_deterministic_for_contract_creation_mixed_varian
         baseline_snapshot.len(),
         2,
         "contract-creation transactions should not create recipient accounts"
+    );
+}
+
+#[test]
+fn repeated_execution_output_is_deterministic_for_noop_mixed_variants_through_dyn_dispatch() {
+    let engine: Box<dyn ExecutionEngine> = Box::new(SimpleExecutionEngine::no_op());
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy_transfer(addr(0xa1), addr(0xa2), 0, 0, 3),
+            mk_eip1559_transfer(addr(0xa1), addr(0xa3), 1, 0, 2, vec![0xde, 0xad]),
+            mk_blob_contract_creation(addr(0xb1), 0, 0, 4, vec![0xbe, 0xef], vec![[0x44; 32]]),
+            mk_blob_transfer(
+                addr(0xc1),
+                addr(0xc2),
+                0,
+                0,
+                0,
+                vec![0xaa],
+                vec![[0x55; 32], [0x66; 32]],
+            ),
+        ],
+        0,
+    );
+
+    let mut initial_state = InMemoryState::new();
+    initial_state.upsert_account(
+        addr(0xa1),
+        Account {
+            balance: 5,
+            ..Account::default()
+        },
+    );
+    initial_state.upsert_account(
+        addr(0xb1),
+        Account {
+            balance: 4,
+            ..Account::default()
+        },
+    );
+
+    let mut baseline_state = initial_state.clone();
+    let baseline_store: &mut dyn StateStore = &mut baseline_state;
+    let baseline_result = engine
+        .execute_block(baseline_store, &block)
+        .expect("baseline no-op execution should succeed deterministically");
+    let baseline_snapshot = baseline_state.snapshot();
+
+    for run in 0..32 {
+        let mut run_state = initial_state.clone();
+        let run_store: &mut dyn StateStore = &mut run_state;
+        let run_result = engine
+            .execute_block(run_store, &block)
+            .expect("repeated no-op execution should succeed deterministically");
+        assert_eq!(
+            run_result, baseline_result,
+            "run {run} produced non-deterministic no-op execution output"
+        );
+        assert_eq!(
+            run_state.snapshot(),
+            baseline_snapshot,
+            "run {run} produced non-deterministic no-op post-state snapshot"
+        );
+    }
+
+    assert_eq!(baseline_result.total_gas_used, 0);
+    assert_eq!(baseline_result.tx_results.len(), 4);
+    assert_eq!(baseline_result.receipts.len(), 4);
+    assert!(baseline_result.tx_results.iter().all(|result| {
+        result.gas_used == 0 && result.cumulative_gas_used == 0 && result.success
+    }));
+    assert!(baseline_result
+        .receipts
+        .iter()
+        .all(|receipt| receipt.cumulative_gas_used == 0 && receipt.success));
+
+    let unique_hashes: BTreeSet<_> = baseline_result
+        .receipts
+        .iter()
+        .map(|receipt| receipt.tx_hash)
+        .collect();
+    assert_eq!(
+        unique_hashes.len(),
+        baseline_result.receipts.len(),
+        "mixed-variant receipts should remain uniquely addressable under no-op execution"
+    );
+
+    let sender_a = baseline_snapshot
+        .get(&addr(0xa1))
+        .expect("legacy/eip1559 sender should remain present");
+    let sender_b = baseline_snapshot
+        .get(&addr(0xb1))
+        .expect("blob-creation sender should remain present");
+    let zero_value_sender = baseline_snapshot
+        .get(&addr(0xc1))
+        .expect("zero-value sender should be materialized");
+    let recipient_a = baseline_snapshot
+        .get(&addr(0xa2))
+        .expect("legacy recipient should be present");
+    let recipient_b = baseline_snapshot
+        .get(&addr(0xa3))
+        .expect("eip1559 recipient should be present");
+    let zero_value_recipient = baseline_snapshot
+        .get(&addr(0xc2))
+        .expect("zero-value recipient should be materialized");
+
+    assert_eq!(sender_a.balance, 0);
+    assert_eq!(sender_a.nonce, 2);
+    assert_eq!(sender_b.balance, 0);
+    assert_eq!(sender_b.nonce, 1);
+    assert_eq!(zero_value_sender.balance, 0);
+    assert_eq!(zero_value_sender.nonce, 1);
+    assert_eq!(recipient_a.balance, 3);
+    assert_eq!(recipient_b.balance, 2);
+    assert_eq!(zero_value_recipient.balance, 0);
+    assert_eq!(
+        baseline_snapshot.len(),
+        6,
+        "contract-creation recipient should not be created in no-op deterministic path"
     );
 }
 
