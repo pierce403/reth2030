@@ -309,3 +309,5 @@ Reflection cadence:
 - Learned behavior: when a new peer is rejected at max peers, `PeerManager::connect` fails with `MaxPeersReached` before session allocation, preserving the existing session and emitting deterministic rejection observability signals.
 - Hardened `execution_determinism_seed_contract` with mixed-variant state-transition failure replay coverage through `Box<dyn ExecutionEngine>` + `&mut dyn StateStore`.
 - Learned behavior: repeated dyn-dispatched execution failures preserve identical `ExecutionError::State` values and identical partial post-state snapshots across reruns.
+- Hardened `conformance_metric_seed_contract` with anchored-history prefix invariants so existing timeline entries remain immutable while new entries append.
+- Learned pitfall: protecting only the bootstrap row allows later historical rows to be rewritten undetected if chronology/latest-scorecard checks still pass.

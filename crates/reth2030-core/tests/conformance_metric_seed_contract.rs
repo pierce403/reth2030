@@ -20,11 +20,8 @@ const ALLOWED_HISTORY_ENTRY_KEYS: [&str; 6] = [
     "failed",
     "pass_rate",
 ];
-const EXPECTED_BOOTSTRAP_RECORDED_ON: &str = "2026-02-27";
-const EXPECTED_BOOTSTRAP_TOTAL: u64 = 4;
-const EXPECTED_BOOTSTRAP_PASSED: u64 = 3;
-const EXPECTED_BOOTSTRAP_FAILED: u64 = 1;
-const EXPECTED_BOOTSTRAP_PASS_RATE: f64 = 0.75;
+const EXPECTED_HISTORY_PREFIX: [(&str, u64, u64, u64, f64); 2] =
+    [("2026-02-27", 4, 3, 1, 0.75), ("2026-02-28", 4, 4, 0, 1.0)];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -298,77 +295,95 @@ fn validate_latest_entry_matches_scorecard(
     Ok(())
 }
 
-fn validate_bootstrap_entry(history: &Value) -> Result<(), String> {
+fn validate_immutable_history_prefix(history: &Value) -> Result<(), String> {
     let history_root = as_object(history, "conformance history root")?;
     let entries = as_array(
         require_key(history_root, "entries", "conformance history root")?,
         "conformance history root.entries",
     )?;
-    let first_entry = as_object(
-        entries
-            .first()
-            .ok_or_else(|| "history entries must not be empty".to_string())?,
-        "bootstrap history entry",
-    )?;
-
-    let recorded_on = as_str(
-        require_key(first_entry, "recorded_on", "bootstrap history entry")?,
-        "bootstrap history entry.recorded_on",
-    )?;
-    if recorded_on != EXPECTED_BOOTSTRAP_RECORDED_ON {
+    if entries.len() < EXPECTED_HISTORY_PREFIX.len() {
         return Err(format!(
-            "bootstrap history entry date must remain `{EXPECTED_BOOTSTRAP_RECORDED_ON}`, found `{recorded_on}`"
+            "conformance history must preserve at least {} anchored entries; found {}",
+            EXPECTED_HISTORY_PREFIX.len(),
+            entries.len()
         ));
     }
 
-    let suite = as_str(
-        require_key(first_entry, "suite", "bootstrap history entry")?,
-        "bootstrap history entry.suite",
-    )?;
-    if suite != EXPECTED_SUITE {
-        return Err(format!(
-            "bootstrap history entry suite must remain `{EXPECTED_SUITE}`, found `{suite}`"
-        ));
-    }
+    for (index, expected) in EXPECTED_HISTORY_PREFIX.iter().enumerate() {
+        let (
+            expected_recorded_on,
+            expected_total,
+            expected_passed,
+            expected_failed,
+            expected_pass_rate,
+        ) = *expected;
+        let entry_context = format!("anchored history entry at index {index}");
+        let entry = as_object(
+            entries
+                .get(index)
+                .ok_or_else(|| format!("missing anchored history entry at index {index}"))?,
+            &entry_context,
+        )?;
 
-    let total = as_u64(
-        require_key(first_entry, "total", "bootstrap history entry")?,
-        "bootstrap history entry.total",
-    )?;
-    if total != EXPECTED_BOOTSTRAP_TOTAL {
-        return Err(format!(
-            "bootstrap history entry total must remain `{EXPECTED_BOOTSTRAP_TOTAL}`, found `{total}`"
-        ));
-    }
+        let recorded_on = as_str(
+            require_key(entry, "recorded_on", &entry_context)?,
+            &format!("{entry_context}.recorded_on"),
+        )?;
+        if recorded_on != expected_recorded_on {
+            return Err(format!(
+                "{entry_context}.recorded_on must remain `{expected_recorded_on}`, found `{recorded_on}`"
+            ));
+        }
 
-    let passed = as_u64(
-        require_key(first_entry, "passed", "bootstrap history entry")?,
-        "bootstrap history entry.passed",
-    )?;
-    if passed != EXPECTED_BOOTSTRAP_PASSED {
-        return Err(format!(
-            "bootstrap history entry passed must remain `{EXPECTED_BOOTSTRAP_PASSED}`, found `{passed}`"
-        ));
-    }
+        let suite = as_str(
+            require_key(entry, "suite", &entry_context)?,
+            &format!("{entry_context}.suite"),
+        )?;
+        if suite != EXPECTED_SUITE {
+            return Err(format!(
+                "{entry_context}.suite must remain `{EXPECTED_SUITE}`, found `{suite}`"
+            ));
+        }
 
-    let failed = as_u64(
-        require_key(first_entry, "failed", "bootstrap history entry")?,
-        "bootstrap history entry.failed",
-    )?;
-    if failed != EXPECTED_BOOTSTRAP_FAILED {
-        return Err(format!(
-            "bootstrap history entry failed must remain `{EXPECTED_BOOTSTRAP_FAILED}`, found `{failed}`"
-        ));
-    }
+        let total = as_u64(
+            require_key(entry, "total", &entry_context)?,
+            &format!("{entry_context}.total"),
+        )?;
+        if total != expected_total {
+            return Err(format!(
+                "{entry_context}.total must remain `{expected_total}`, found `{total}`"
+            ));
+        }
 
-    let pass_rate = as_f64(
-        require_key(first_entry, "pass_rate", "bootstrap history entry")?,
-        "bootstrap history entry.pass_rate",
-    )?;
-    if (pass_rate - EXPECTED_BOOTSTRAP_PASS_RATE).abs() > 1e-12 {
-        return Err(format!(
-            "bootstrap history entry pass_rate must remain `{EXPECTED_BOOTSTRAP_PASS_RATE}`, found `{pass_rate}`"
-        ));
+        let passed = as_u64(
+            require_key(entry, "passed", &entry_context)?,
+            &format!("{entry_context}.passed"),
+        )?;
+        if passed != expected_passed {
+            return Err(format!(
+                "{entry_context}.passed must remain `{expected_passed}`, found `{passed}`"
+            ));
+        }
+
+        let failed = as_u64(
+            require_key(entry, "failed", &entry_context)?,
+            &format!("{entry_context}.failed"),
+        )?;
+        if failed != expected_failed {
+            return Err(format!(
+                "{entry_context}.failed must remain `{expected_failed}`, found `{failed}`"
+            ));
+        }
+
+        let pass_rate = as_f64(
+            require_key(entry, "pass_rate", &entry_context)?,
+            &format!("{entry_context}.pass_rate"),
+        )?;
+        if (pass_rate - expected_pass_rate).abs() > 1e-12 {
+            return Err(format!(
+                "{entry_context}.pass_rate must remain `{expected_pass_rate}`, found `{pass_rate}`"
+            ));
+        }
     }
 
     Ok(())
@@ -732,15 +747,15 @@ fn validate_latest_entry_matches_scorecard_rejects_pass_rate_drift() {
 }
 
 #[test]
-fn validate_bootstrap_entry_rejects_rewritten_baseline_history() {
-    let rewritten_history = history_fixture(json!([
+fn validate_immutable_history_prefix_accepts_appended_entries() {
+    let appended_history = history_fixture(json!([
         {
-            "recorded_on": EXPECTED_BOOTSTRAP_RECORDED_ON,
+            "recorded_on": "2026-02-27",
             "suite": EXPECTED_SUITE,
             "total": 4,
-            "passed": 4,
-            "failed": 0,
-            "pass_rate": 1.0
+            "passed": 3,
+            "failed": 1,
+            "pass_rate": 0.75
         },
         {
             "recorded_on": "2026-02-28",
@@ -749,12 +764,61 @@ fn validate_bootstrap_entry_rejects_rewritten_baseline_history() {
             "passed": 4,
             "failed": 0,
             "pass_rate": 1.0
+        },
+        {
+            "recorded_on": "2026-03-01",
+            "suite": EXPECTED_SUITE,
+            "total": 5,
+            "passed": 5,
+            "failed": 0,
+            "pass_rate": 1.0
         }
     ]));
 
-    let err =
-        validate_bootstrap_entry(&rewritten_history).expect_err("rewriting first entry must fail");
-    assert!(err.contains("bootstrap history entry"));
+    validate_immutable_history_prefix(&appended_history)
+        .expect("append-only entries should preserve anchored prefix");
+}
+
+#[test]
+fn validate_immutable_history_prefix_rejects_shortened_history() {
+    let shortened_history = history_fixture(json!([{
+        "recorded_on": "2026-02-27",
+        "suite": EXPECTED_SUITE,
+        "total": 4,
+        "passed": 3,
+        "failed": 1,
+        "pass_rate": 0.75
+    }]));
+
+    let err = validate_immutable_history_prefix(&shortened_history)
+        .expect_err("shortened history must fail anchored-prefix validation");
+    assert!(err.contains("preserve at least"));
+}
+
+#[test]
+fn validate_immutable_history_prefix_rejects_rewritten_baseline_history() {
+    let rewritten_history = history_fixture(json!([
+        {
+            "recorded_on": "2026-02-27",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 3,
+            "failed": 1,
+            "pass_rate": 0.75
+        },
+        {
+            "recorded_on": "2026-02-28",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 3,
+            "failed": 1,
+            "pass_rate": 0.75
+        }
+    ]));
+
+    let err = validate_immutable_history_prefix(&rewritten_history)
+        .expect_err("rewriting anchored history entry must fail");
+    assert!(err.contains("anchored history entry"));
 }
 
 #[test]
@@ -764,8 +828,8 @@ fn checked_in_metric_timeline_has_multiple_entries_and_docs_tracking_contract() 
         serde_json::from_str(&history_contents).expect("history artifact must remain valid JSON");
     validate_time_series_history(&history)
         .expect("checked-in conformance history must remain a valid time-series timeline");
-    validate_bootstrap_entry(&history)
-        .expect("checked-in conformance history must preserve bootstrap entry continuity");
+    validate_immutable_history_prefix(&history)
+        .expect("checked-in conformance history must preserve anchored history continuity");
 
     let scorecard_contents = read_repo_file("vectors/baseline/scorecard.json");
     let scorecard: Value = serde_json::from_str(&scorecard_contents)
