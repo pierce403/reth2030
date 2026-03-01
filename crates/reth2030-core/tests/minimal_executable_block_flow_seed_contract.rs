@@ -311,6 +311,87 @@ fn types_represent_post_execution_block_flow_with_mixed_tx_variants() {
 }
 
 #[test]
+fn types_represent_post_execution_zero_gas_flow_with_mixed_tx_variants() {
+    let block = Block {
+        header: minimal_header(0, 0),
+        transactions: vec![
+            Transaction::Legacy(LegacyTx {
+                nonce: 0,
+                from: addr(0x90),
+                to: Some(addr(0x91)),
+                gas_limit: 0,
+                gas_price: 1,
+                value: 0,
+                data: vec![0xaa],
+            }),
+            Transaction::Eip1559(Eip1559Tx {
+                nonce: 1,
+                from: addr(0x92),
+                to: None,
+                gas_limit: 0,
+                max_fee_per_gas: 2,
+                max_priority_fee_per_gas: 1,
+                value: 0,
+                data: vec![0xbb],
+            }),
+            Transaction::Blob(BlobTx {
+                nonce: 2,
+                from: addr(0x93),
+                to: Some(addr(0x94)),
+                gas_limit: 0,
+                max_fee_per_gas: 3,
+                max_priority_fee_per_gas: 1,
+                max_fee_per_blob_gas: 2,
+                value: 0,
+                data: vec![0xcc],
+                blob_versioned_hashes: vec![[0x95; 32]],
+            }),
+        ],
+        receipts: vec![
+            Receipt {
+                tx_hash: [0x90; 32],
+                success: true,
+                cumulative_gas_used: 0,
+                logs: Vec::new(),
+            },
+            Receipt {
+                tx_hash: [0x92; 32],
+                success: false,
+                cumulative_gas_used: 0,
+                logs: Vec::new(),
+            },
+            Receipt {
+                tx_hash: [0x93; 32],
+                success: true,
+                cumulative_gas_used: 0,
+                logs: vec![LogEntry {
+                    address: addr(0x94),
+                    topics: vec![[0x96; 32]],
+                    data: vec![0xdd],
+                }],
+            },
+        ],
+    };
+
+    assert_eq!(block.validate_basic(), Ok(()));
+    assert_eq!(
+        block
+            .transactions
+            .iter()
+            .map(Transaction::gas_limit)
+            .collect::<Vec<_>>(),
+        vec![0, 0, 0]
+    );
+
+    let encoded = block.to_json_bytes().expect("block serialization");
+    let decoded = Block::from_json_bytes(&encoded).expect("block deserialization");
+    assert_eq!(decoded, block);
+    assert_eq!(decoded.validate_basic(), Ok(()));
+    assert_eq!(decoded.header.gas_limit, 0);
+    assert_eq!(decoded.header.gas_used, 0);
+}
+
+#[test]
 fn minimal_block_flow_rejects_receipt_count_mismatch() {
     let block = Block {
         header: minimal_header(30_000_000, 21_000),

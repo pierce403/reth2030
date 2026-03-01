@@ -303,3 +303,5 @@ Reflection cadence:
 - Learned pitfall: checking only required flag presence/value is insufficient; allowing additional flags can still redirect suite behavior while appearing to satisfy the seed contract.
 - Hardened `conformance_metric_seed_contract` to fail closed on unexpected top-level or entry fields in `vectors/baseline/conformance-history.json`.
 - Learned pitfall: count/date/pass-rate invariants can still pass when unreviewed JSON keys are silently added; enforce explicit allowed-key contracts for conformance history artifacts.
+- Hardened `minimal_executable_block_flow_seed_contract` with zero-gas mixed-variant post-execution coverage (`Legacy`/`Eip1559`/`Blob`) and JSON roundtrip assertions.
+- Learned behavior: `Block::validate_basic` intentionally accepts zero-gas plateau receipts when `header.gas_limit == header.gas_used == 0` and receipt count/final-gas invariants hold, preserving no-op execution trace representability.
