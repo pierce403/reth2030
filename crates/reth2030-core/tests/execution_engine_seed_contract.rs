@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use reth2030_core::{ExecutionEngine, InMemoryState, SimpleExecutionEngine};
+use reth2030_core::{
+    Account, BlockExecutionResult, ExecutionEngine, ExecutionError, InMemoryState,
+    SimpleExecutionEngine, StateStore,
+};
 use reth2030_types::{Block, Header};
 
 const TODO_SEED_TASK_LINE: &str = "- [x] Define an `ExecutionEngine` trait in core.";
@@ -71,6 +74,41 @@ fn empty_block() -> Block {
         },
         transactions: Vec::new(),
         receipts: Vec::new(),
+    }
+}
+
+fn execute_via_dyn_reference(
+    engine: &dyn ExecutionEngine,
+    state: &mut dyn StateStore,
+    block: &Block,
+) -> Result<BlockExecutionResult, ExecutionError> {
+    engine.execute_block(state, block)
+}
+
+#[derive(Debug, Default)]
+struct ExternalNoopEngine;
+
+impl ExecutionEngine for ExternalNoopEngine {
+    fn execute_block(
+        &self,
+        state: &mut dyn StateStore,
+        _block: &Block,
+    ) -> Result<BlockExecutionResult, ExecutionError> {
+        state.upsert_account(
+            [9; 20],
+            Account {
+                balance: 7,
+                nonce: 1,
+                code: vec![0x60, 0x00],
+                ..Account::default()
+            },
+        );
+
+        Ok(BlockExecutionResult {
+            tx_results: Vec::new(),
+            receipts: Vec::new(),
+            total_gas_used: 0,
+        })
     }
 }
 
@@ -167,4 +205,47 @@ fn execution_engine_trait_is_dyn_dispatchable_from_public_api() {
     assert_eq!(result.total_gas_used, 0);
     assert!(result.tx_results.is_empty());
     assert!(result.receipts.is_empty());
+}
+
+#[test]
+fn execution_engine_trait_can_be_called_via_dyn_reference_helper() {
+    let engine = SimpleExecutionEngine::default();
+    let mut state = InMemoryState::new();
+    let block = empty_block();
+
+    let result = execute_via_dyn_reference(&engine, &mut state, &block)
+        .expect("helper should execute through &dyn ExecutionEngine");
+    assert_eq!(result.total_gas_used, 0);
+}
+
+#[test]
+fn execution_engine_trait_supports_external_impl_using_dyn_state_store() {
+    let engine = ExternalNoopEngine;
+    let mut state = InMemoryState::new();
+    let block = empty_block();
+
+    let result = execute_via_dyn_reference(&engine, &mut state, &block)
+        .expect("external engine implementation should execute");
+    assert_eq!(result.total_gas_used, 0);
+
+    let account = state
+        .get_account(&[9; 20])
+        .expect("external engine should have populated state through dyn StateStore");
+    assert_eq!(account.balance, 7);
+    assert_eq!(account.nonce, 1);
+    assert_eq!(account.code, vec![0x60, 0x00]);
+}
+
+#[test]
+fn execution_engine_dyn_dispatch_propagates_invalid_block_errors() {
+    let engine: Box<dyn ExecutionEngine> = Box::new(SimpleExecutionEngine::default());
+    let mut state = InMemoryState::new();
+    let mut block = empty_block();
+    block.header.gas_limit = 10;
+    block.header.gas_used = 11;
+
+    let error = engine
+        .execute_block(&mut state, &block)
+        .expect_err("invalid block must fail closed through dyn-dispatched engine");
+    assert!(matches!(error, ExecutionError::InvalidBlock(_)));
 }

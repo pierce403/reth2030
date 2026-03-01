@@ -228,3 +228,8 @@ Reflection cadence:
 - Learned behavior: when `base_gas_per_tx` exceeds `header.gas_limit` on the first transaction, `SimpleExecutionEngine` fails closed with `GasLimitExceeded` before any state mutation.
 - Hardened `conformance_metric_seed_contract` to lock bootstrap timeline continuity: the first `conformance-history` entry (2026-02-27, 3/4 pass) is now immutable while newer entries append.
 - Learned pitfall: without a fixed bootstrap-entry anchor, append-only conformance timelines can be silently rewritten while still passing monotonic-date and latest-scorecard parity checks.
+
+### 2026-03-01
+
+- Hardened `execution_engine_seed_contract` with dyn-dispatch edge coverage: `&dyn ExecutionEngine` helper callsites, external engine implementations, and invalid-block error propagation through trait objects.
+- Learned pitfall: state-focused engine contract tests must use the `StateStore` surface (`get_account`/`upsert_account`) and account for `Account::storage` in initializers to match current core APIs.
