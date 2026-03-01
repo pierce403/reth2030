@@ -281,3 +281,5 @@ Reflection cadence:
 - Learned pitfall: `Path::is_file()`/`is_dir()` checks alone can mask symlinked ADR content; use `fs::symlink_metadata` and explicit `file_type().is_symlink()` guards for strict ADR-directory integrity.
 - Hardened `InMemoryState` deterministic transition coverage for self-transfer saturation replay (`nonce = u64::MAX`, `balance = u128::MAX`) and account metadata preservation.
 - Learned behavior: self-transfers execute as debit-then-credit on the same account, so saturation preserves capped balance/nonce while retaining code and storage across deterministic replays.
+- Hardened `execution_ordering` integration coverage with ordered intrinsic-gas failure and block-gas-limit partial-progress edge cases across mixed transaction variants.
+- Learned behavior: intrinsic-gas or block-gas-limit failure halts later transactions fail-closed while preserving prior ordered state progress, so transaction ordering changes which recipients are funded before the halt.

@@ -548,6 +548,158 @@ fn block_execution_halts_at_first_ordered_failure_in_mixed_variant_dependency_ch
 }
 
 #[test]
+fn block_execution_halts_on_intrinsic_gas_failure_after_partial_progress() {
+    let engine = SimpleExecutionEngine::default();
+    let block = block_with_txs_and_gas_limit(
+        vec![
+            mk_legacy(addr(0xe1), addr(0xe2), 0, 6),
+            mk_eip1559(addr(0xe2), addr(0xe3), 0, 20_999, 1, vec![0xaa]),
+            mk_blob(
+                addr(0xe2),
+                addr(0xe4),
+                1,
+                21_000,
+                2,
+                vec![0xbb, 0xcc],
+                vec![[0x34; 32]],
+            ),
+        ],
+        84_000,
+    );
+
+    let mut state = InMemoryState::new();
+    state.upsert_account(
+        addr(0xe1),
+        Account {
+            balance: 6,
+            ..Account::default()
+        },
+    );
+
+    let err = engine
+        .execute_block(&mut state, &block)
+        .expect_err("second transaction should fail intrinsic gas validation");
+    assert_eq!(
+        err,
+        ExecutionError::TxGasLimitTooLow {
+            tx_gas_limit: 20_999,
+            required: 21_000,
+            tx_index: 1,
+        }
+    );
+
+    let account_a = state
+        .get_account(&addr(0xe1))
+        .expect("first sender should reflect successful first transfer");
+    let account_b = state
+        .get_account(&addr(0xe2))
+        .expect("first recipient should persist after later failure");
+    assert_eq!(account_a.balance, 0);
+    assert_eq!(account_a.nonce, 1);
+    assert_eq!(account_b.balance, 6);
+    assert_eq!(account_b.nonce, 0);
+    assert!(
+        state.get_account(&addr(0xe3)).is_none(),
+        "intrinsic-gas failing recipient must not be created"
+    );
+    assert!(
+        state.get_account(&addr(0xe4)).is_none(),
+        "transactions after intrinsic-gas failure must not execute"
+    );
+}
+
+#[test]
+fn block_execution_order_controls_partial_progress_when_block_gas_limit_is_hit() {
+    let engine = SimpleExecutionEngine::default();
+    let tx_a = mk_legacy(addr(0xf1), addr(0xf2), 0, 7);
+    let tx_b = mk_eip1559(addr(0xf1), addr(0xf3), 1, 21_000, 5, vec![0x01]);
+    let tx_c = mk_blob(
+        addr(0xf1),
+        addr(0xf4),
+        2,
+        21_000,
+        3,
+        vec![0x02, 0x03],
+        vec![[0x56; 32]],
+    );
+
+    let block_order_a =
+        block_with_txs_and_gas_limit(vec![tx_a.clone(), tx_b.clone(), tx_c.clone()], 42_000);
+    let block_order_b = block_with_txs_and_gas_limit(vec![tx_c, tx_b, tx_a], 42_000);
+
+    let mut state_a = InMemoryState::new();
+    state_a.upsert_account(
+        addr(0xf1),
+        Account {
+            balance: 15,
+            ..Account::default()
+        },
+    );
+    let mut state_b = state_a.clone();
+
+    let err_a = engine
+        .execute_block(&mut state_a, &block_order_a)
+        .expect_err("third transaction should exceed block gas limit in order A");
+    let err_b = engine
+        .execute_block(&mut state_b, &block_order_b)
+        .expect_err("third transaction should exceed block gas limit in order B");
+
+    assert_eq!(
+        err_a,
+        ExecutionError::GasLimitExceeded {
+            gas_limit: 42_000,
+            attempted: 63_000,
+            tx_index: 2,
+        }
+    );
+    assert_eq!(
+        err_b,
+        ExecutionError::GasLimitExceeded {
+            gas_limit: 42_000,
+            attempted: 63_000,
+            tx_index: 2,
+        }
+    );
+
+    let sender_a = state_a
+        .get_account(&addr(0xf1))
+        .expect("sender should retain partial progress in order A");
+    let sender_b = state_b
+        .get_account(&addr(0xf1))
+        .expect("sender should retain partial progress in order B");
+    assert_eq!(sender_a.balance, 3);
+    assert_eq!(sender_a.nonce, 2);
+    assert_eq!(sender_b.balance, 7);
+    assert_eq!(sender_b.nonce, 2);
+
+    let recipient_a_1 = state_a
+        .get_account(&addr(0xf2))
+        .expect("first recipient in order A should receive funds");
+    let recipient_a_2 = state_a
+        .get_account(&addr(0xf3))
+        .expect("second recipient in order A should receive funds");
+    assert_eq!(recipient_a_1.balance, 7);
+    assert_eq!(recipient_a_2.balance, 5);
+    assert!(
+        state_a.get_account(&addr(0xf4)).is_none(),
+        "failing third transfer recipient in order A must remain absent"
+    );
+
+    let recipient_b_1 = state_b
+        .get_account(&addr(0xf4))
+        .expect("first recipient in order B should receive funds");
+    let recipient_b_2 = state_b
+        .get_account(&addr(0xf3))
+        .expect("second recipient in order B should receive funds");
+    assert_eq!(recipient_b_1.balance, 3);
+    assert_eq!(recipient_b_2.balance, 5);
+    assert!(
+        state_b.get_account(&addr(0xf2)).is_none(),
+        "failing third transfer recipient in order B must remain absent"
+    );
+}
+
+#[test]
 fn receipt_hash_is_stable_for_same_tx_across_positions() {
     let engine = SimpleExecutionEngine::default();
     let filler = mk_legacy(addr(0x10), addr(0x11), 0, 1);

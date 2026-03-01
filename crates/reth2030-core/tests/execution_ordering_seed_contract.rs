@@ -11,10 +11,12 @@ use reth2030_types::{Block, Header, LegacyTx, Transaction};
 
 const TODO_TASK_LINE: &str =
     "- [x] Add integration tests for multi-transaction block execution ordering.";
-const REQUIRED_EXECUTION_ORDERING_TESTS: [&str; 3] = [
+const REQUIRED_EXECUTION_ORDERING_TESTS: [&str; 5] = [
     "fn block_execution_respects_transaction_order()",
     "fn block_execution_order_controls_cross_sender_funding_dependencies()",
     "fn block_execution_halts_at_first_ordered_failure_in_mixed_variant_dependency_chain()",
+    "fn block_execution_halts_on_intrinsic_gas_failure_after_partial_progress()",
+    "fn block_execution_order_controls_partial_progress_when_block_gas_limit_is_hit()",
 ];
 
 fn repo_root() -> PathBuf {
