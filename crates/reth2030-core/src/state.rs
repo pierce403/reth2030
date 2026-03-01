@@ -385,6 +385,40 @@ mod tests {
     }
 
     #[test]
+    fn transfer_to_self_saturating_balance_is_deterministic_across_replays() {
+        let storage_key = [0x51; 32];
+        let storage_value = [0x52; 32];
+        let mut storage = std::collections::BTreeMap::new();
+        storage.insert(storage_key, storage_value);
+
+        let initial_account = Account {
+            nonce: u64::MAX,
+            balance: u128::MAX,
+            code: vec![0xde, 0xad],
+            storage,
+        };
+
+        let mut state_a = InMemoryState::new();
+        state_a.upsert_account(addr(0xaa), initial_account.clone());
+        let mut state_b = InMemoryState::new();
+        state_b.upsert_account(addr(0xaa), initial_account);
+
+        state_a
+            .transfer(addr(0xaa), addr(0xaa), 1)
+            .expect("self transfer");
+        state_b
+            .transfer(addr(0xaa), addr(0xaa), 1)
+            .expect("self transfer");
+
+        assert_eq!(state_a.snapshot(), state_b.snapshot());
+        let account = state_a.get_account(&addr(0xaa)).expect("account exists");
+        assert_eq!(account.nonce, u64::MAX);
+        assert_eq!(account.balance, u128::MAX);
+        assert_eq!(account.code, vec![0xde, 0xad]);
+        assert_eq!(account.storage.get(&storage_key), Some(&storage_value));
+    }
+
+    #[test]
     fn apply_transactions_is_deterministic() {
         let tx1 = Transaction::Legacy(LegacyTx {
             nonce: 0,

@@ -8,10 +8,11 @@ use reth2030_types::{Eip1559Tx, LegacyTx, Transaction};
 
 const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] State backend passes deterministic transition tests.";
-const REQUIRED_STATE_DETERMINISM_TESTS: [&str; 8] = [
+const REQUIRED_STATE_DETERMINISM_TESTS: [&str; 9] = [
     "fn storage_roundtrip_is_deterministic()",
     "fn apply_transactions_is_deterministic()",
     "fn zero_value_transfer_from_missing_sender_creates_accounts_deterministically()",
+    "fn transfer_to_self_saturating_balance_is_deterministic_across_replays()",
     "fn apply_transactions_partial_progress_failure_is_deterministic()",
     "fn apply_transaction_contract_creation_is_deterministic()",
     "fn apply_transaction_from_missing_sender_is_deterministic_and_fail_closed()",
@@ -238,4 +239,38 @@ fn deterministic_apply_transaction_saturation_replay_matches_snapshot() {
     assert_eq!(sender.balance, 5);
     assert_eq!(sender.nonce, u64::MAX);
     assert_eq!(recipient.balance, u128::MAX);
+}
+
+#[test]
+fn deterministic_transfer_self_saturation_replay_preserves_account_fields() {
+    let storage_key = [0x51; 32];
+    let storage_value = [0x52; 32];
+    let mut storage = std::collections::BTreeMap::new();
+    storage.insert(storage_key, storage_value);
+
+    let initial_account = Account {
+        nonce: u64::MAX,
+        balance: u128::MAX,
+        code: vec![0xde, 0xad],
+        storage,
+    };
+
+    let mut state_a = InMemoryState::new();
+    state_a.upsert_account(addr(0xaa), initial_account.clone());
+    let mut state_b = InMemoryState::new();
+    state_b.upsert_account(addr(0xaa), initial_account);
+
+    state_a
+        .transfer(addr(0xaa), addr(0xaa), 1)
+        .expect("first run");
+    state_b
+        .transfer(addr(0xaa), addr(0xaa), 1)
+        .expect("second run");
+
+    assert_eq!(state_a.snapshot(), state_b.snapshot());
+    let account = state_a.get_account(&addr(0xaa)).expect("sender account");
+    assert_eq!(account.nonce, u64::MAX);
+    assert_eq!(account.balance, u128::MAX);
+    assert_eq!(account.code, vec![0xde, 0xad]);
+    assert_eq!(account.storage.get(&storage_key), Some(&storage_value));
 }

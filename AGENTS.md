@@ -279,3 +279,5 @@ Reflection cadence:
 - Learned behavior: `SimpleExecutionEngine::no_op()` still applies successful earlier transitions and then fails closed at the first state error without creating the failing transaction recipient.
 - Hardened `architecture_notes_contract` and `architecture_notes_seed_contract` to fail closed on symlinked ADR directory paths/entries and to require dedicated symlink-edge coverage tests.
 - Learned pitfall: `Path::is_file()`/`is_dir()` checks alone can mask symlinked ADR content; use `fs::symlink_metadata` and explicit `file_type().is_symlink()` guards for strict ADR-directory integrity.
+- Hardened `InMemoryState` deterministic transition coverage for self-transfer saturation replay (`nonce = u64::MAX`, `balance = u128::MAX`) and account metadata preservation.
+- Learned behavior: self-transfers execute as debit-then-credit on the same account, so saturation preserves capped balance/nonce while retaining code and storage across deterministic replays.
