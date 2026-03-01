@@ -14,7 +14,8 @@ const REQUIRED_VECTOR_JOB_ARGS: [&str; 5] = [
     "--baseline-snapshot vectors/baseline/snapshot.json",
     "--out-dir artifacts/vectors",
 ];
-const DISALLOWED_VECTOR_COMMAND_CONTROL_FRAGMENTS: [&str; 5] = ["||", "&&", ";", "`", "$("];
+const DISALLOWED_VECTOR_COMMAND_CONTROL_FRAGMENTS: [&str; 7] =
+    ["||", "&&", "|", "&", ";", "`", "$("];
 const DISALLOWED_VECTOR_COMMAND_PHRASES: [&str; 4] =
     ["set +e", "set +o errexit", "set +o pipefail", "exit 0"];
 const DISALLOWED_VECTOR_COMMAND_KEYWORDS: [&str; 7] =
@@ -477,5 +478,17 @@ cd vectors \
 #[test]
 fn vector_command_guard_rejects_shell_control_fragments() {
     let command = "cargo run -p reth2030-vectors --locked -- --fixtures-dir vectors/ethereum-state-tests/minimal && echo bypass";
+    assert_command_validation_fails(command);
+}
+
+#[test]
+fn vector_command_guard_rejects_pipeline_masking_fragment() {
+    let command = "cargo run -p reth2030-vectors --locked -- --fixtures-dir vectors/ethereum-state-tests/minimal | cat";
+    assert_command_validation_fails(command);
+}
+
+#[test]
+fn vector_command_guard_rejects_background_masking_fragment() {
+    let command = "cargo run -p reth2030-vectors --locked -- --fixtures-dir vectors/ethereum-state-tests/minimal &";
     assert_command_validation_fails(command);
 }

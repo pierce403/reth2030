@@ -265,3 +265,5 @@ Reflection cadence:
 - Learned pitfall: ADR content contracts alone can miss seed drift if the TODO checkmark and bootstrap ADR anchor are not asserted together.
 - Hardened `execution_determinism_seed_contract` with repeated-run cumulative-gas-overflow coverage (`ExecutionError::GasOverflow`) plus partial post-state snapshot parity checks.
 - Learned behavior: overflow on a later transaction is fail-closed before that transaction's state application; only earlier successful transaction progress persists deterministically across reruns.
+- Hardened `public_vector_ci_seed_contract` fail-closed command guards to reject single-pipe and background execution fragments (`|`, `&`) in addition to existing control operators.
+- Learned pitfall: allowing pipeline/background shell operators in the vector CI command can mask `reth2030-vectors` failures (for example `| cat` or trailing `&`) while leaving the job green.
