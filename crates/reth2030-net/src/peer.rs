@@ -480,6 +480,43 @@ mod tests {
     }
 
     #[test]
+    fn reconnect_fails_closed_on_session_id_overflow_without_mutating_existing_session() {
+        let mut manager = PeerManager::new(1);
+        manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30303"))
+            .expect("initial connect must succeed");
+
+        let original_session = manager
+            .session(&peer_id(1))
+            .expect("existing session should be present")
+            .clone();
+
+        manager.next_session_id = u64::MAX;
+
+        let err = manager
+            .connect(PeerInfo::new(peer_id(1), "127.0.0.1:30333"))
+            .expect_err("reconnect must fail closed on session overflow");
+
+        assert_eq!(err, PeerManagerError::SessionIdOverflow);
+        assert_eq!(manager.peer_count(), 1);
+
+        let retained_session = manager
+            .session(&peer_id(1))
+            .expect("original session must remain after failed reconnect");
+        assert_eq!(retained_session, &original_session);
+
+        assert_eq!(manager.events(), &[PeerEvent::Connected(peer_id(1))]);
+        assert_eq!(
+            manager.lifecycle_logs(),
+            &[format!(
+                "peer.connected peer_id={} active_peers=1",
+                format_peer_id(&peer_id(1))
+            )]
+        );
+        assert_eq!(manager.metrics_snapshot(), (1, 0, 0, 1));
+    }
+
+    #[test]
     fn disconnecting_unknown_peer_does_not_emit_observability_signals() {
         let mut manager = PeerManager::new(2);
         manager
