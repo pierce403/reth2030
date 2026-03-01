@@ -287,3 +287,5 @@ Reflection cadence:
 - Learned pitfall: in this `syn` version, `ItemMacro` does not expose visibility metadata, so macro export detection must key off `#[macro_export]` attributes instead of `pub` visibility checks.
 - Hardened startup/shutdown runtime coverage for execute-failure with pre-existing connected peers: when mock sync fails with `MaxPeersReached`, `execute(...)` still performs shutdown and disconnects pre-existing peers deterministically.
 - Learned behavior: `NodeRuntime::execute(true)` fail-closed mock-sync errors preserve rejection observability while appending deterministic disconnect signals from shutdown for already-connected peers.
+- Hardened `InMemoryState` deterministic transition coverage with mixed-variant (`Legacy`/`Eip1559`/`Blob`) replay tests for both success (including contract creation) and cross-sender partial-progress failure paths.
+- Learned behavior: in mixed-variant `apply_transactions` sequences, a failed sender debit leaves that sender nonce unchanged, halts subsequent transactions fail-closed, and preserves all earlier successful state progress deterministically across reruns.

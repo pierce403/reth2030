@@ -4,16 +4,18 @@ use std::{
 };
 
 use reth2030_core::{Account, InMemoryState, StateError, StateStore};
-use reth2030_types::{Eip1559Tx, LegacyTx, Transaction};
+use reth2030_types::{BlobTx, Eip1559Tx, LegacyTx, Transaction};
 
 const TODO_ACCEPTANCE_CRITERION_LINE: &str =
     "- [x] State backend passes deterministic transition tests.";
-const REQUIRED_STATE_DETERMINISM_TESTS: [&str; 9] = [
+const REQUIRED_STATE_DETERMINISM_TESTS: [&str; 11] = [
     "fn storage_roundtrip_is_deterministic()",
     "fn apply_transactions_is_deterministic()",
     "fn zero_value_transfer_from_missing_sender_creates_accounts_deterministically()",
     "fn transfer_to_self_saturating_balance_is_deterministic_across_replays()",
     "fn apply_transactions_partial_progress_failure_is_deterministic()",
+    "fn apply_transactions_mixed_variants_and_creation_is_deterministic()",
+    "fn apply_transactions_mixed_variants_cross_sender_failure_is_deterministic()",
     "fn apply_transaction_contract_creation_is_deterministic()",
     "fn apply_transaction_from_missing_sender_is_deterministic_and_fail_closed()",
     "fn apply_transaction_nonce_and_recipient_balance_saturation_is_deterministic()",
@@ -107,6 +109,80 @@ fn deterministic_partial_progress_failure_replay_matches_error_and_post_state() 
     assert_eq!(err_a, err_b);
     assert_eq!(state_a.snapshot(), state_b.snapshot());
     assert_eq!(state_a.get_account(&addr(0x03)), None);
+}
+
+#[test]
+fn deterministic_mixed_variant_cross_sender_failure_replay_halts_follow_on_transactions() {
+    let txs = vec![
+        Transaction::Legacy(LegacyTx {
+            nonce: 0,
+            from: addr(0x01),
+            to: Some(addr(0x02)),
+            gas_limit: 21_000,
+            gas_price: 1,
+            value: 3,
+            data: vec![0xa1],
+        }),
+        Transaction::Blob(BlobTx {
+            nonce: 0,
+            from: addr(0x02),
+            to: Some(addr(0x03)),
+            gas_limit: 21_000,
+            max_fee_per_gas: 3,
+            max_priority_fee_per_gas: 1,
+            max_fee_per_blob_gas: 2,
+            value: 4,
+            data: vec![0xa2],
+            blob_versioned_hashes: vec![[0x88; 32]],
+        }),
+        Transaction::Eip1559(Eip1559Tx {
+            nonce: 1,
+            from: addr(0x01),
+            to: Some(addr(0x04)),
+            gas_limit: 21_000,
+            max_fee_per_gas: 2,
+            max_priority_fee_per_gas: 1,
+            value: 1,
+            data: vec![0xa3],
+        }),
+    ];
+
+    let mut state_a = InMemoryState::new();
+    state_a.upsert_account(
+        addr(0x01),
+        Account {
+            balance: 5,
+            ..Account::default()
+        },
+    );
+    let mut state_b = state_a.clone();
+
+    let err_a = state_a
+        .apply_transactions(&txs)
+        .expect_err("first run must fail");
+    let err_b = state_b
+        .apply_transactions(&txs)
+        .expect_err("second run must fail");
+
+    assert_eq!(
+        err_a,
+        StateError::InsufficientBalance {
+            address: addr(0x02),
+            available: 3,
+            requested: 4,
+        }
+    );
+    assert_eq!(err_a, err_b);
+    assert_eq!(state_a.snapshot(), state_b.snapshot());
+
+    let first_sender = state_a.get_account(&addr(0x01)).expect("first sender");
+    let second_sender = state_a.get_account(&addr(0x02)).expect("second sender");
+    assert_eq!(first_sender.balance, 2);
+    assert_eq!(first_sender.nonce, 1);
+    assert_eq!(second_sender.balance, 3);
+    assert_eq!(second_sender.nonce, 0);
+    assert_eq!(state_a.get_account(&addr(0x03)), None);
+    assert_eq!(state_a.get_account(&addr(0x04)), None);
 }
 
 #[test]
