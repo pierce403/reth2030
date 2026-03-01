@@ -301,3 +301,5 @@ Reflection cadence:
 - Learned behavior: a block with receipts but zero transactions must fail closed with `ValidationError::ReceiptCountMismatch`, and pre-execution `to: None` transaction shape is preserved through `Block` JSON roundtrip.
 - Hardened `public_vector_ci_seed_contract` required-argument validation to reject unexpected extra `reth2030-vectors` flags, preserving a strict canonical vector-suite invocation in CI.
 - Learned pitfall: checking only required flag presence/value is insufficient; allowing additional flags can still redirect suite behavior while appearing to satisfy the seed contract.
+- Hardened `conformance_metric_seed_contract` to fail closed on unexpected top-level or entry fields in `vectors/baseline/conformance-history.json`.
+- Learned pitfall: count/date/pass-rate invariants can still pass when unreviewed JSON keys are silently added; enforce explicit allowed-key contracts for conformance history artifacts.

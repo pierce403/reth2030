@@ -11,6 +11,15 @@ const TODO_ACCEPTANCE_CRITERION_LINE: &str =
 const EXPECTED_METRIC: &str = "minimal-state-tests-pass-rate";
 const EXPECTED_SUITE: &str = "minimal-state-tests";
 const EXPECTED_DESCRIPTION_FIXTURE_PATH: &str = "vectors/ethereum-state-tests/minimal";
+const ALLOWED_HISTORY_ROOT_KEYS: [&str; 3] = ["metric", "description", "entries"];
+const ALLOWED_HISTORY_ENTRY_KEYS: [&str; 6] = [
+    "recorded_on",
+    "suite",
+    "total",
+    "passed",
+    "failed",
+    "pass_rate",
+];
 const EXPECTED_BOOTSTRAP_RECORDED_ON: &str = "2026-02-27";
 const EXPECTED_BOOTSTRAP_TOTAL: u64 = 4;
 const EXPECTED_BOOTSTRAP_PASSED: u64 = 3;
@@ -35,6 +44,19 @@ fn require_key<'a>(
     mapping
         .get(key)
         .ok_or_else(|| format!("missing key `{key}` in {context}"))
+}
+
+fn reject_unknown_keys(
+    mapping: &Map<String, Value>,
+    allowed_keys: &[&str],
+    context: &str,
+) -> Result<(), String> {
+    for key in mapping.keys() {
+        if !allowed_keys.contains(&key.as_str()) {
+            return Err(format!("{context} contains unexpected key `{key}`"));
+        }
+    }
+    Ok(())
 }
 
 fn as_object<'a>(value: &'a Value, context: &str) -> Result<&'a Map<String, Value>, String> {
@@ -107,6 +129,7 @@ fn parse_iso_date(date: &str) -> Option<(u32, u32, u32)> {
 
 fn validate_time_series_history(history: &Value) -> Result<(), String> {
     let root = as_object(history, "conformance history root")?;
+    reject_unknown_keys(root, &ALLOWED_HISTORY_ROOT_KEYS, "conformance history root")?;
     let metric = as_str(
         require_key(root, "metric", "conformance history root")?,
         "conformance history root.metric",
@@ -146,6 +169,7 @@ fn validate_time_series_history(history: &Value) -> Result<(), String> {
     for (index, entry_value) in entries.iter().enumerate() {
         let entry_context = format!("conformance history root.entries[{index}]");
         let entry = as_object(entry_value, &entry_context)?;
+        reject_unknown_keys(entry, &ALLOWED_HISTORY_ENTRY_KEYS, &entry_context)?;
 
         let recorded_on = as_str(
             require_key(entry, "recorded_on", &entry_context)?,
@@ -529,6 +553,59 @@ fn validate_time_series_history_rejects_missing_or_undocumented_description() {
     let err = validate_time_series_history(&undocumented_description)
         .expect_err("description without fixture reference must fail validation");
     assert!(err.contains("must reference"));
+}
+
+#[test]
+fn validate_time_series_history_rejects_unknown_root_or_entry_fields() {
+    let unknown_root_field = json!({
+        "metric": EXPECTED_METRIC,
+        "description": format!("Historical scorecard trend for {EXPECTED_DESCRIPTION_FIXTURE_PATH}."),
+        "entries": [
+            {
+                "recorded_on": "2026-02-27",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 3,
+                "failed": 1,
+                "pass_rate": 0.75
+            },
+            {
+                "recorded_on": "2026-02-28",
+                "suite": EXPECTED_SUITE,
+                "total": 4,
+                "passed": 4,
+                "failed": 0,
+                "pass_rate": 1.0
+            }
+        ],
+        "notes": "extra metadata should fail closed"
+    });
+    let err = validate_time_series_history(&unknown_root_field)
+        .expect_err("unexpected root fields must fail validation");
+    assert!(err.contains("unexpected key `notes`"));
+
+    let unknown_entry_field = history_fixture(json!([
+        {
+            "recorded_on": "2026-02-27",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 3,
+            "failed": 1,
+            "pass_rate": 0.75,
+            "note": "extra metadata should fail closed"
+        },
+        {
+            "recorded_on": "2026-02-28",
+            "suite": EXPECTED_SUITE,
+            "total": 4,
+            "passed": 4,
+            "failed": 0,
+            "pass_rate": 1.0
+        }
+    ]));
+    let err = validate_time_series_history(&unknown_entry_field)
+        .expect_err("unexpected entry fields must fail validation");
+    assert!(err.contains("unexpected key `note`"));
 }
 
 #[test]
