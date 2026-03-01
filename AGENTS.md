@@ -243,3 +243,5 @@ Reflection cadence:
 - Hardened `mock_sync_seed_contract` so this saturation/recovery runtime test remains required and the checked seed acceptance does not silently regress.
 - Hardened startup/shutdown runtime coverage for stopped-state re-entry: calling `execute(...)` after a completed execute must fail closed at `start` and preserve prior peer events/logs/metrics without mutation.
 - Learned behavior: once `NodeRuntime` reaches `Stopped`, further `execute(...)` calls are intentionally non-restartable and should leave observability state unchanged.
+- Added `vector_harness_seed_contract` tests to lock the checked Phase 5 seed outcome (`TODO.md` checkmark + workspace/member + vectors crate manifest + fixture-harness pipeline wiring + edge-case unit-test coverage contract).
+- Learned pitfall: CI vector-suite contract coverage alone does not guarantee the vector harness seed remains intact; keep a dedicated seed contract tied to the exact TODO line and harness source/test invariants.
